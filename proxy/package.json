@@ -1,0 +1,19 @@
+{
+    "name": "redis-agent-memory-inspector-proxy",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "description": "Transparent proxy for Redis Cloud Agent Memory - lets the Chrome extension bypass Cloudflare's managed challenge by routing requests server-side.",
+    "license": "MIT",
+    "main": "api/proxy.js",
+    "scripts": {
+        "start": "node api/proxy.js",
+        "dev": "node --watch api/proxy.js"
+    },
+    "engines": {
+        "node": ">=18.0.0"
+    },
+    "dependencies": {
+        "express": "~5.1.0"
+    }
+}

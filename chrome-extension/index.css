@@ -1,0 +1,923 @@
+/*
+ * Redis Agent Memory Inspector - styles.
+ * Tokens lifted from redis-developer-catalog so this matches the rest of
+ * Redis DevRel surfaces.
+ */
+
+:root {
+    --color-primary: #ff4438;
+    --color-accent: #dcff1c;
+    --color-secondary: #c796e4;
+    --color-dark: #2d4754;
+    --color-text: #091a23;
+    --color-text-secondary: rgba(9, 26, 35, 0.7);
+    --color-text-muted: rgba(9, 26, 35, 0.5);
+    --color-bg-primary: #ffffff;
+    --color-bg-secondary: #f8f9fa;
+    --color-bg-tertiary: #f1f3f5;
+    --color-border: #e1e5e9;
+    --color-border-strong: #c8ced3;
+    --color-info: #7fdbfe;
+    --color-danger: #f44336;
+    --color-success: #2db96b;
+
+    --border-radius: 4px;
+    --border-radius-lg: 8px;
+
+    --spacing-xs: 0.5rem;
+    --spacing-sm: 1rem;
+    --spacing-md: 1.5rem;
+    --spacing-lg: 2rem;
+
+    --font-display: "Space Grotesk", system-ui, sans-serif;
+    --font-mono: "Space Mono", ui-monospace, monospace;
+}
+
+/*
+ * Dark mode - driven entirely by a hidden checkbox in index.html. The CSS
+ * variables below override the light defaults whenever #theme-toggle is
+ * :checked, and every component that reads from those variables flips
+ * automatically. A few sites use hardcoded chip/badge colors that don't go
+ * through variables; those have their own overrides further down.
+ *
+ * No JavaScript involved - works on any modern Chrome (the inspector's
+ * only target), since `:has()` ships in Chrome 105+.
+ */
+body:has(#theme-toggle:checked) {
+    --color-text: #eef1f4;
+    --color-text-secondary: rgba(238, 241, 244, 0.75);
+    --color-text-muted: rgba(238, 241, 244, 0.5);
+    --color-bg-primary: #1d2731;
+    --color-bg-secondary: #151d25;
+    --color-bg-tertiary: #2a3540;
+    --color-border: #2d3a48;
+    --color-border-strong: #44525f;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+/*
+ * Visually hide an interactive element (used for the dark-mode checkbox)
+ * while keeping it accessible to assistive tech + interactable via its
+ * <label for="...">.
+ */
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/*
+ * The HTML `hidden` attribute would normally apply `display: none` via the
+ * user-agent stylesheet, but our class rules below set `display: flex` /
+ * `display: grid`, which would silently override it. Force `hidden` to win
+ * so JS-driven show/hide actually works.
+ */
+[hidden] {
+    display: none !important;
+}
+
+/*
+ * Keep html at the browser default (16px) so `1rem` = 16px throughout. If
+ * we set font-size on html here in rem, html would resolve it against its
+ * own initial value and the root would shrink - pulling every rem-sized
+ * element down with it.
+ */
+html {
+    height: 100%;
+}
+
+body {
+    margin: 0;
+    height: 100%;
+    background: var(--color-bg-secondary);
+    color: var(--color-text);
+    font-family: var(--font-display);
+    font-size: 0.8125rem; /* = 13px against 16px root */
+    line-height: 1.45;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+/* ---- Header ----------------------------------------------------------- */
+
+.app-header {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    background: var(--color-bg-primary);
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+}
+
+.app-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.app-icon {
+    width: 1.5rem;
+    height: 1.5rem;
+    flex-shrink: 0;
+}
+
+/*
+ * The icon is duotone with hardcoded fills (#163341 + #FF4438). On dark
+ * backgrounds the dusk-dark paths disappear; invert + hue-rotate flips
+ * darks to lights while keeping the red recognisable as red.
+ */
+body:has(#theme-toggle:checked) .app-icon {
+    filter: invert(1) hue-rotate(180deg);
+}
+
+.app-header h1 {
+    font-size: 0.875rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 0;
+}
+
+/*
+ * Everything that should hug the right edge of the header - connection
+ * pills, theme toggle, refresh, reconfigure - sits in this flex group.
+ * `margin-left: auto` pushes the whole group right, leaving the title +
+ * icon on the left.
+ */
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    margin-left: auto;
+}
+
+.connection-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+.pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 2px 8px;
+    background: var(--color-bg-tertiary);
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    color: var(--color-text-secondary);
+    line-height: 1.4;
+}
+
+.pill .pill-key {
+    color: var(--color-text-muted);
+}
+
+.pill .pill-value {
+    color: var(--color-text);
+    font-weight: 700;
+}
+
+.link-btn {
+    background: none;
+    border: none;
+    color: var(--color-text-secondary);
+    font-family: var(--font-display);
+    font-size: 0.75rem;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: var(--border-radius);
+}
+
+.link-btn:hover {
+    background: var(--color-bg-tertiary);
+    color: var(--color-text);
+}
+
+.icon-btn {
+    background: none;
+    border: 1px solid var(--color-border);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: var(--border-radius);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.875rem;
+    line-height: 1;
+    transition: transform 400ms ease, background 150ms ease, color 150ms ease;
+}
+
+.icon-btn:hover {
+    background: var(--color-bg-tertiary);
+    color: var(--color-text);
+}
+
+.icon-btn.is-spinning {
+    transform: rotate(360deg);
+}
+
+/*
+ * Dark-mode toggle. The icon swap is driven by the same `:has()` selector
+ * as the theme variables - moon when light theme is active (click to go
+ * dark), sun when dark theme is active (click to go light).
+ */
+.theme-toggle-btn::before {
+    content: "🌙";
+}
+
+body:has(#theme-toggle:checked) .theme-toggle-btn::before {
+    content: "☀️";
+}
+
+/* Keyboard focus ring on the label (since the underlying checkbox is hidden). */
+#theme-toggle:focus-visible + * .theme-toggle-btn,
+.theme-toggle-btn:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+}
+
+/* ---- Connect panel ---------------------------------------------------- */
+
+.connect-panel {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-lg);
+}
+
+.connect-card {
+    width: 100%;
+    max-width: 28.75rem;
+    background: var(--color-bg-primary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius-lg);
+    padding: var(--spacing-md);
+    box-shadow: 0 1px 3px rgba(9, 26, 35, 0.04);
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    margin-bottom: var(--spacing-sm);
+}
+
+.field-label {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-secondary);
+}
+
+.field-hint {
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--color-text-muted);
+}
+
+.backend-options {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.backend-option {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.4rem 0.6rem;
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: border-color 120ms ease, background 120ms ease;
+}
+
+.backend-option:has(input:checked) {
+    border-color: var(--color-primary);
+    background: rgba(255, 68, 56, 0.05);
+}
+
+.backend-option input {
+    margin: 0;
+    accent-color: var(--color-primary);
+}
+
+.field-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.field input,
+.field select {
+    flex: 1;
+    width: 100%;
+    padding: 0.5rem 0.7rem;
+    background: var(--color-bg-primary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--color-text);
+}
+
+.field input:focus,
+.field select:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(255, 68, 56, 0.12);
+}
+
+.health-badge {
+    font-size: 0.6875rem;
+    font-family: var(--font-mono);
+    padding: 2px 6px;
+    border-radius: 12px;
+    background: var(--color-bg-tertiary);
+    color: var(--color-text-muted);
+    min-width: 3.5rem;
+    text-align: center;
+}
+
+.health-badge.is-live {
+    background: rgba(45, 185, 107, 0.12);
+    color: var(--color-success);
+}
+
+.health-badge.is-dead {
+    background: rgba(244, 67, 54, 0.12);
+    color: var(--color-danger);
+}
+
+.connect-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: var(--spacing-md);
+}
+
+.primary-btn {
+    background: var(--color-primary);
+    color: white;
+    border: none;
+    padding: 0.5rem 1.2rem;
+    border-radius: var(--border-radius);
+    font-family: var(--font-display);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.primary-btn:hover {
+    background: #e63d32;
+}
+
+.primary-btn:disabled {
+    background: var(--color-border-strong);
+    cursor: not-allowed;
+}
+
+.connect-tip {
+    margin: var(--spacing-md) 0 0;
+    font-size: 0.6875rem;
+    color: var(--color-text-muted);
+}
+
+.connect-tip code {
+    background: var(--color-bg-tertiary);
+    padding: 1px 4px;
+    border-radius: 3px;
+}
+
+/* ---- Inspector layout ------------------------------------------------- */
+
+.inspector-view {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px;
+    background: var(--color-border);
+    overflow: hidden;
+}
+
+.pane {
+    background: var(--color-bg-secondary);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.pane-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    background: var(--color-bg-primary);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.pane-title {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+}
+
+.pane-header h2 {
+    margin: 0;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+/*
+ * Small subtitle under each pane's h2, used to make the scope contrast
+ * obvious: "this session only" on working memory, "across all sessions for
+ * this user" on long-term memory.
+ */
+.pane-subtitle {
+    font-size: 0.625rem;
+    color: var(--color-text-muted);
+    font-style: italic;
+    line-height: 1.2;
+}
+
+.pane-header-right {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+}
+
+.pane-stats {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    color: var(--color-text-muted);
+}
+
+/*
+ * Always-visible destructive button in the pane header. Muted by default
+ * (so it doesn't compete with the content); turns danger-red on its own
+ * hover state to signal destructive intent before the click.
+ */
+.pane-danger-btn {
+    transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+    background: none;
+    border: 1px solid var(--color-border);
+    color: var(--color-text-muted);
+    cursor: pointer;
+    font-family: var(--font-display);
+    font-size: 0.625rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 2px 8px;
+    border-radius: var(--border-radius);
+}
+
+.pane-danger-btn:hover {
+    color: var(--color-danger);
+    border-color: var(--color-danger);
+    background: rgba(244, 67, 54, 0.08);
+}
+
+.pane-toolbar {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    padding: 0.5rem var(--spacing-sm);
+    background: var(--color-bg-primary);
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+}
+
+.search-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.ltm-search {
+    flex: 1;
+    min-width: 0;
+    padding: 0.4rem 0.6rem;
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    color: var(--color-text);
+}
+
+.ltm-search:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    background: var(--color-bg-primary);
+    box-shadow: 0 0 0 3px rgba(255, 68, 56, 0.12);
+}
+
+.optimize-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.3rem 0.5rem;
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    user-select: none;
+}
+
+.optimize-toggle:hover {
+    border-color: var(--color-border-strong);
+    color: var(--color-text);
+}
+
+.optimize-toggle input {
+    margin: 0;
+    accent-color: var(--color-primary);
+}
+
+/*
+ * .card-id is pushed right via margin-left: auto. The score badge that often
+ * follows it in DOM doesn't need its own auto-margin - once a flex item
+ * claims the free space, subsequent items just sit next to it on the right.
+ */
+.card-id {
+    margin-left: auto;
+}
+
+.score-badge {
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    padding: 1px 6px;
+    border-radius: 10px;
+    background: rgba(255, 68, 56, 0.1);
+    color: var(--color-primary);
+    cursor: help;
+}
+
+/*
+ * Per-card delete button - appears on card hover, sits at the far right of
+ * the meta row. Same hover-reveal pattern as the pane-danger-btn, just
+ * scoped to the card.
+ */
+.card-delete-btn {
+    opacity: 0;
+    transition: opacity 120ms ease, background 120ms ease, color 120ms ease;
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    font-size: 0.75rem;
+    line-height: 1;
+    padding: 1px 5px;
+    border-radius: 50%;
+    margin-left: 0.2rem;
+}
+
+.card:hover .card-delete-btn,
+.card-delete-btn:focus-visible {
+    opacity: 1;
+}
+
+.card-delete-btn:hover {
+    color: var(--color-danger);
+    background: rgba(244, 67, 54, 0.12);
+}
+
+.active-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+}
+
+.active-filters:empty {
+    display: none;
+}
+
+.filter-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 2px 4px 2px 7px;
+    background: var(--color-bg-tertiary);
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    color: var(--color-text);
+}
+
+.filter-pill .filter-pill-key {
+    color: var(--color-text-muted);
+}
+
+.filter-pill-remove {
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    padding: 0 4px;
+    border-radius: 50%;
+    font-size: 0.8125rem;
+    line-height: 1;
+}
+
+.filter-pill-remove:hover {
+    color: var(--color-danger);
+    background: rgba(244, 67, 54, 0.1);
+}
+
+.card-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    margin: 0;
+    list-style: none; /* reset <ul> default bullets */
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.card-list > li {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.card-list:empty::after {
+    content: "(empty)";
+    color: var(--color-text-muted);
+    font-style: italic;
+    text-align: center;
+    padding: var(--spacing-md);
+}
+
+/* ---- Cards ------------------------------------------------------------ */
+
+.card {
+    background: var(--color-bg-primary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
+    padding: 0.6rem 0.7rem;
+    transition: box-shadow 200ms ease, border-color 200ms ease;
+}
+
+.card.is-new {
+    animation: card-flash 800ms ease-out;
+}
+
+@keyframes card-flash {
+    0% {
+        background: var(--color-accent);
+        border-color: var(--color-accent);
+    }
+    100% {
+        background: var(--color-bg-primary);
+        border-color: var(--color-border);
+    }
+}
+
+.card-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    color: var(--color-text-muted);
+    margin-bottom: 0.3rem;
+}
+
+.role-tag {
+    text-transform: uppercase;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 1px 5px;
+    border-radius: 3px;
+}
+
+.role-tag.role-user,
+.role-tag.role-assistant {
+    background: rgba(127, 219, 254, 0.18);
+    color: #0a6e9c;
+}
+
+.role-tag.role-system,
+.role-tag.role-tool {
+    background: var(--color-bg-tertiary);
+    color: var(--color-text-secondary);
+}
+
+/*
+ * Inline "session: <id>" element in the card meta row, sitting right after
+ * the timestamp. The label is italic + muted (so it doesn't compete with
+ * the timestamp); the session_id itself is monospace with a soft tint so it
+ * reads clearly as an identifier.
+ */
+.card-meta-session {
+    font-size: 0.625rem;
+    color: var(--color-text-muted);
+    font-style: italic;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    margin-left: 0.5rem;
+}
+
+.card-meta-session code {
+    font-family: var(--font-mono);
+    font-style: normal;
+    font-size: 0.625rem;
+    background: var(--color-bg-tertiary);
+    padding: 1px 4px;
+    border-radius: 3px;
+    color: var(--color-text-secondary);
+}
+
+.card-text {
+    font-size: 0.78125rem;
+    color: var(--color-text);
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.chip-row {
+    margin-top: 0.5rem;
+}
+
+.chip-row-label {
+    display: block;
+    font-size: 0.625rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-text-secondary);
+    margin-bottom: 0.25rem;
+}
+
+.chip-row-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}
+
+.chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 7px;
+    border-radius: 10px;
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    line-height: 1.5;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: border-color 120ms ease, transform 80ms ease;
+}
+
+.chip:hover {
+    border-color: currentColor;
+}
+
+.chip:active {
+    transform: scale(0.96);
+}
+
+.chip-topic {
+    background: #e8ebec; /* dusk grey */
+    color: #163341; /* dusk */
+}
+
+.chip-entity {
+    background: rgba(199, 150, 228, 0.18); /* lavender */
+    color: #6a3aa0;
+}
+
+.type-badge {
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: var(--color-bg-tertiary);
+    color: var(--color-text-secondary);
+}
+
+.type-badge.type-semantic {
+    background: rgba(255, 68, 56, 0.12);
+    color: var(--color-primary);
+}
+
+.type-badge.type-episodic {
+    background: var(--color-accent);
+    color: var(--color-dark);
+}
+
+.type-badge.type-message {
+    background: rgba(45, 71, 84, 0.1);
+    color: var(--color-dark);
+}
+
+.extracted-flag {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+}
+
+.extracted-flag.is-extracted {
+    color: var(--color-success);
+}
+
+.extracted-flag.is-pending {
+    color: var(--color-text-muted);
+}
+
+/*
+ * Dark-mode overrides for chip / badge sites that hardcode colors instead
+ * of using CSS variables. The tinted backgrounds (rgba) already work on
+ * dark surfaces; the text colors need to lighten so they stay readable.
+ */
+body:has(#theme-toggle:checked) .role-tag.role-user,
+body:has(#theme-toggle:checked) .role-tag.role-assistant {
+    background: rgba(127, 219, 254, 0.18);
+    color: #7fdbfe;
+}
+
+body:has(#theme-toggle:checked) .chip-topic {
+    background: var(--color-bg-tertiary);
+    color: var(--color-text);
+}
+
+body:has(#theme-toggle:checked) .chip-entity {
+    background: rgba(199, 150, 228, 0.22);
+    color: #d4b3f0;
+}
+
+body:has(#theme-toggle:checked) .type-badge.type-message {
+    background: rgba(245, 247, 250, 0.08);
+    color: var(--color-text-secondary);
+}
+
+/* ---- Summary ---------------------------------------------------------- */
+
+.summary-block {
+    flex-shrink: 0;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    background: var(--color-bg-primary);
+    border-top: 1px solid var(--color-border);
+}
+
+.summary-block h3 {
+    margin: 0 0 0.3rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-secondary);
+}
+
+.summary-block p {
+    margin: 0;
+    font-size: 0.75rem;
+    color: var(--color-text);
+    font-style: italic;
+}
+
+/* ---- Footer ----------------------------------------------------------- */
+
+.app-footer {
+    flex-shrink: 0;
+    padding: 4px var(--spacing-sm);
+    background: var(--color-bg-primary);
+    border-top: 1px solid var(--color-border);
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    color: var(--color-text-muted);
+}
