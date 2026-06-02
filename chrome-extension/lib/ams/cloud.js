@@ -219,6 +219,7 @@ export function createCloudClient(cfg) {
         // Map OSS-shape filter → cloud's nested { filter, filterOp } shape.
         const cloudFilter = {};
         if (userId) cloudFilter.ownerId = { eq: userId };
+        if (filter.sessionId) cloudFilter.sessionId = { eq: filter.sessionId };
         if (filter.topics?.length) cloudFilter.topics = { any: filter.topics };
         if (filter.entities?.length)
             cloudFilter.entities = { any: filter.entities };
@@ -280,6 +281,23 @@ export function createCloudClient(cfg) {
         return { status: "ok", deleted: data?.deleted ?? [] };
     }
 
+    // Summary views are an OSS-server feature; the Cloud / Iris API surface
+    // doesn't expose them today. Stubbed so the inspector can call these
+    // uniformly without backend-specific branching - they just return
+    // "nothing here" and the UI gracefully skips the banners.
+    async function listSummaryViews() {
+        return [];
+    }
+    async function createSummaryView() {
+        throw new Error("summary views not supported on cloud backend");
+    }
+    async function listSummaryViewPartitions() {
+        return [];
+    }
+    async function runSummaryViewPartition() {
+        throw new Error("summary views not supported on cloud backend");
+    }
+
     return {
         backend: "cloud",
         pingHealth,
@@ -289,5 +307,9 @@ export function createCloudClient(cfg) {
         discoverFilters,
         deleteWorkingMemory,
         deleteLongTermMemory,
+        listSummaryViews,
+        createSummaryView,
+        listSummaryViewPartitions,
+        runSummaryViewPartition,
     };
 }

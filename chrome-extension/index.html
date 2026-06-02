@@ -254,12 +254,69 @@
                 <header class="pane-header">
                     <div class="pane-title">
                         <h2>Long-term memory</h2>
-                        <span class="pane-subtitle">
+                        <span id="longterm-subtitle" class="pane-subtitle">
                             across all sessions for this user
                         </span>
                     </div>
                     <span id="longterm-stats" class="pane-stats">-</span>
                 </header>
+                <div
+                    class="pane-tabs"
+                    role="tablist"
+                    aria-label="Long-term memory scope"
+                >
+                    <button
+                        type="button"
+                        class="pane-tab"
+                        role="tab"
+                        aria-selected="false"
+                        data-scope="session"
+                    >
+                        This session
+                    </button>
+                    <button
+                        type="button"
+                        class="pane-tab is-active"
+                        role="tab"
+                        aria-selected="true"
+                        data-scope="all"
+                    >
+                        Across sessions
+                    </button>
+                </div>
+                <div
+                    id="ltm-summary-banner"
+                    class="summary-banner"
+                    hidden
+                >
+                    <div
+                        id="ltm-summary-text"
+                        class="summary-banner-text"
+                    ></div>
+                    <div class="summary-banner-footer">
+                        <button
+                            type="button"
+                            id="ltm-summary-toggle"
+                            class="summary-banner-toggle"
+                            hidden
+                        >
+                            Show more
+                        </button>
+                        <div
+                            id="ltm-summary-meta"
+                            class="summary-banner-meta"
+                        ></div>
+                        <button
+                            type="button"
+                            id="ltm-summary-refresh"
+                            class="summary-banner-refresh"
+                            title="Recompute summary now (runs the LLM)"
+                            aria-label="Refresh summary"
+                        >
+                            ↻
+                        </button>
+                    </div>
+                </div>
                 <div class="pane-toolbar">
                     <div class="search-row">
                         <input

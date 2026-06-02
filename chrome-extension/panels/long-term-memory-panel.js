@@ -12,18 +12,108 @@
 import { $, escape } from "../lib/dom.js";
 import { formatDateTime, relativeTime } from "../lib/format.js";
 
+/**
+ * Render the SummaryView partition into the banner above the search
+ * toolbar. Three states:
+ *
+ *   setSummary(null)         → hide the banner entirely. For Cloud
+ *                              (no summary views) or when the bootstrap
+ *                              never completed.
+ *   setSummary({})           → show the banner with an empty-state
+ *                              message so the ↻ refresh button stays
+ *                              reachable (lets the user bootstrap the
+ *                              first partition by clicking refresh
+ *                              instead of waiting on AMS's hourly
+ *                              continuous worker).
+ *   setSummary(partition)    → show the populated banner.
+ *
+ * Long summaries are clamped to 4 lines in CSS; if the content
+ * overflows the clamp we expose a "Show more / Show less" toggle.
+ */
+export function setSummary(partition) {
+    const banner = $("ltm-summary-banner");
+    if (partition === null) {
+        banner.hidden = true;
+        return;
+    }
+    banner.hidden = false;
+    const textEl = $("ltm-summary-text");
+    const metaEl = $("ltm-summary-meta");
+    const toggleEl = $("ltm-summary-toggle");
+
+    if (!partition || !partition.summary) {
+        banner.classList.add("is-empty");
+        textEl.textContent =
+            "No summary yet for this scope. Click ↻ to generate one.";
+        metaEl.textContent = "";
+        toggleEl.hidden = true;
+        return;
+    }
+
+    banner.classList.remove("is-empty");
+    textEl.textContent = partition.summary;
+    const meta = [];
+    if (typeof partition.memory_count === "number") {
+        meta.push(
+            `from ${partition.memory_count} memor${
+                partition.memory_count === 1 ? "y" : "ies"
+            }`,
+        );
+    }
+    if (partition.computed_at) {
+        meta.push(`computed ${relativeTime(partition.computed_at)}`);
+    }
+    metaEl.textContent = meta.join(" · ");
+
+    // Defer overflow detection one frame so layout has settled with the
+    // new text content before we measure.
+    requestAnimationFrame(() => updateSummaryToggleVisibility());
+}
+
+/**
+ * Show the toggle only when collapsed text would actually be truncated.
+ * Briefly expands to measure the full scrollHeight, then restores the
+ * previous expand/collapse state. Cheap (no reflow churn the user can
+ * see) and avoids a "Show more" affordance for short summaries that
+ * already fit in the clamp.
+ */
+function updateSummaryToggleVisibility() {
+    const banner = $("ltm-summary-banner");
+    const textEl = $("ltm-summary-text");
+    const toggleEl = $("ltm-summary-toggle");
+
+    const wasExpanded = banner.classList.contains("is-expanded");
+    banner.classList.remove("is-expanded");
+    const collapsedHeight = textEl.clientHeight;
+    banner.classList.add("is-expanded");
+    const expandedHeight = textEl.scrollHeight;
+    if (!wasExpanded) banner.classList.remove("is-expanded");
+
+    const overflows = expandedHeight > collapsedHeight + 2;
+    toggleEl.hidden = !overflows;
+    toggleEl.textContent = wasExpanded ? "Show less" : "Show more";
+}
+
 const seenIds = new Set();
 const filter = { text: "", topics: [], entities: [], optimizeQuery: false };
+// Tab scope: "all" = every memory for the user (default, existing behavior);
+// "session" = only memories whose session_id matches the connected session.
+let scope = "all";
 let searchDebounce = null;
 let onChangeCallback = null;
 let onDeleteCallback = null;
 
 export function reset() {
     seenIds.clear();
+    setSummary(null);
 }
 
 export function getFilter() {
     return filter;
+}
+
+export function getScope() {
+    return scope;
 }
 
 /**
@@ -51,6 +141,42 @@ export function init({ onChange, onDelete }) {
         filter.optimizeQuery = event.target.checked;
         onChangeCallback?.();
     });
+
+    // Show more / Show less for the clamped summary text.
+    $("ltm-summary-toggle").addEventListener("click", () => {
+        const banner = $("ltm-summary-banner");
+        const toggleEl = $("ltm-summary-toggle");
+        const nowExpanded = banner.classList.toggle("is-expanded");
+        toggleEl.textContent = nowExpanded ? "Show less" : "Show more";
+    });
+
+    // Tabs: pick a button by `data-scope`, mirror state into `scope`, update
+    // pressed visuals + subtitle, and fire onChange so the caller refetches
+    // with the new filter.
+    for (const tab of document.querySelectorAll(".pane-tab")) {
+        tab.addEventListener("click", () => {
+            const next = tab.dataset.scope;
+            if (!next || next === scope) return;
+            scope = next;
+            for (const t of document.querySelectorAll(".pane-tab")) {
+                const isActive = t.dataset.scope === scope;
+                t.classList.toggle("is-active", isActive);
+                t.setAttribute("aria-selected", String(isActive));
+            }
+            const subtitle = $("longterm-subtitle");
+            if (subtitle) {
+                subtitle.textContent =
+                    scope === "session"
+                        ? "for the connected session only"
+                        : "across all sessions for this user";
+            }
+            // Reset the "is-new" highlight when switching scopes - the set
+            // of visible memories changes completely, and stale ids would
+            // leave previously-seen records unflashed in the new view.
+            seenIds.clear();
+            onChangeCallback?.();
+        });
+    }
 }
 
 function toggleFilter(label, value) {

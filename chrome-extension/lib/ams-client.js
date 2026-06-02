@@ -24,6 +24,12 @@
  *   discoverFilters()                                  → { users, namespaces }
  *   deleteWorkingMemory(sessionId, userId, namespace)  → { status }
  *   deleteLongTermMemory(memoryIds)                    → { status }
+ *   listSummaryViews()                                 → SummaryView[]
+ *   createSummaryView(spec)                            → SummaryView
+ *   listSummaryViewPartitions(viewId, filters)         → PartitionResult[]
+ *
+ * Cloud doesn't expose summary views; its impls return [] / throw so the
+ * caller can degrade without backend-specific branches.
  *
  * The interface is deliberately small - it covers exactly what the
  * inspector uses today. Adding a method (e.g. `memoryPrompt`) means

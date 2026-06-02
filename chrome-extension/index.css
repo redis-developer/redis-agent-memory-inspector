@@ -21,6 +21,13 @@
     --color-danger: #f44336;
     --color-success: #2db96b;
 
+    /* Shared accent for the role-tag pills in the working pane and the
+     * active tab in the long-term pane - so "user / assistant / active
+     * scope" all read as the same emphasis. Dark mode overrides the
+     * text color; the alpha bg tint works on both backgrounds. */
+    --color-role-accent: #0a6e9c;
+    --color-role-accent-bg: rgba(127, 219, 254, 0.18);
+
     --border-radius: 4px;
     --border-radius-lg: 8px;
 
@@ -52,6 +59,7 @@ body:has(#theme-toggle:checked) {
     --color-bg-tertiary: #2a3540;
     --color-border: #2d3a48;
     --color-border-strong: #44525f;
+    --color-role-accent: var(--color-info);
 }
 
 * {
@@ -503,6 +511,124 @@ body:has(#theme-toggle:checked) .theme-toggle-btn::before {
     background: rgba(244, 67, 54, 0.08);
 }
 
+.pane-tabs {
+    display: flex;
+    gap: 0;
+    padding: 0 var(--spacing-sm);
+    background: var(--color-bg-primary);
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+}
+.pane-tab {
+    appearance: none;
+    background: transparent;
+    border: none;
+    padding: 0.45rem 0.75rem;
+    font-size: 0.85rem;
+    font-family: inherit;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px; /* overlap the parent's border so active tab merges */
+    transition: color 120ms, border-color 120ms;
+}
+.pane-tab:hover {
+    color: var(--color-text);
+}
+.pane-tab.is-active {
+    /* Same accent as the role-user / role-assistant pills in the working
+     * pane - both flip together in dark mode via --color-role-accent. */
+    color: var(--color-role-accent);
+    border-bottom-color: var(--color-role-accent);
+    background: var(--color-role-accent-bg);
+    font-weight: 600;
+}
+
+.summary-banner {
+    padding: 0.55rem var(--spacing-sm);
+    background: var(--color-bg-secondary);
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+    font-size: 0.85rem;
+    line-height: 1.45;
+}
+.summary-banner-text {
+    color: var(--color-text);
+    white-space: pre-wrap;
+    /* Clamp by default to 4 lines so a long multi-paragraph summary
+     * doesn't dominate the pane. The "Show more" toggle drops the clamp. */
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.summary-banner.is-expanded .summary-banner-text {
+    -webkit-line-clamp: unset;
+    overflow: visible;
+}
+.summary-banner.is-empty .summary-banner-text {
+    color: var(--color-text-muted);
+    font-style: italic;
+}
+.summary-banner-footer {
+    /* One-row footer: "Show more" on the left, then meta and the ↻
+     * refresh button on the right (meta pushed via margin-left: auto).
+     * align-items: center keeps the bordered refresh button vertically
+     * aligned with the plain-text meta + toggle. */
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.3rem;
+    min-height: 1.2em; /* hold the line even when both children are empty */
+}
+.summary-banner-toggle {
+    appearance: none;
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: 0.75rem;
+    font-family: inherit;
+    color: var(--color-text-muted);
+    cursor: pointer;
+}
+.summary-banner-toggle:hover {
+    color: var(--color-text);
+}
+.summary-banner-meta {
+    margin-left: auto;
+    font-size: 0.72rem;
+    color: var(--color-text-muted);
+    font-family: var(--font-mono);
+}
+.summary-banner-refresh {
+    appearance: none;
+    background: transparent;
+    border: 1px solid var(--color-border);
+    color: var(--color-text-muted);
+    border-radius: 3px;
+    padding: 0.2rem 0.45rem;
+    font-size: 0.95rem;
+    line-height: 1;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: color 120ms, border-color 120ms, background 120ms;
+}
+.summary-banner-refresh:hover:not(:disabled) {
+    color: var(--color-text);
+    border-color: var(--color-text-muted);
+}
+.summary-banner-refresh:disabled {
+    cursor: wait;
+    opacity: 0.6;
+}
+.summary-banner-refresh.is-spinning {
+    animation: spin 0.9s linear infinite;
+}
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
 .pane-toolbar {
     display: flex;
     flex-direction: column;
@@ -662,7 +788,7 @@ body:has(#theme-toggle:checked) .theme-toggle-btn::before {
     list-style: none; /* reset <ul> default bullets */
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: 0.7rem;
 }
 
 .card-list > li {
@@ -724,8 +850,8 @@ body:has(#theme-toggle:checked) .theme-toggle-btn::before {
 
 .role-tag.role-user,
 .role-tag.role-assistant {
-    background: rgba(127, 219, 254, 0.18);
-    color: #0a6e9c;
+    background: var(--color-role-accent-bg);
+    color: var(--color-role-accent);
 }
 
 .role-tag.role-system,
@@ -864,11 +990,9 @@ body:has(#theme-toggle:checked) .theme-toggle-btn::before {
  * of using CSS variables. The tinted backgrounds (rgba) already work on
  * dark surfaces; the text colors need to lighten so they stay readable.
  */
-body:has(#theme-toggle:checked) .role-tag.role-user,
-body:has(#theme-toggle:checked) .role-tag.role-assistant {
-    background: rgba(127, 219, 254, 0.18);
-    color: #7fdbfe;
-}
+/* Role tags + active tab share --color-role-accent, which flips to the
+ * brighter cyan in dark mode via the override at the top of this file -
+ * no per-mode rules needed here anymore. */
 
 body:has(#theme-toggle:checked) .chip-topic {
     background: var(--color-bg-tertiary);

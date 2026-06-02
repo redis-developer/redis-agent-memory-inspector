@@ -25,6 +25,11 @@ const PATHS = {
     listSessions: "/v1/working-memory/",
     ltmSearch: "/v1/long-term-memory/search",
     ltmRoot: "/v1/long-term-memory",
+    summaryViews: "/v1/summary-views",
+    summaryViewPartitions: (vid) =>
+        `/v1/summary-views/${encodeURIComponent(vid)}/partitions`,
+    summaryViewPartitionRun: (vid) =>
+        `/v1/summary-views/${encodeURIComponent(vid)}/partitions/run`,
 };
 
 export function createOssClient(cfg) {
@@ -80,6 +85,7 @@ export function createOssClient(cfg) {
         const body = { text: filter.text ?? "", limit: 50 };
         if (userId) body.user_id = { eq: userId };
         if (namespace) body.namespace = { eq: namespace };
+        if (filter.sessionId) body.session_id = { eq: filter.sessionId };
         if (filter.topics?.length) body.topics = { any: filter.topics };
         if (filter.entities?.length) body.entities = { any: filter.entities };
 
@@ -129,6 +135,67 @@ export function createOssClient(cfg) {
         return res.json();
     }
 
+    async function listSummaryViews() {
+        const res = await fetch(`${url}${PATHS.summaryViews}`, {
+            headers: authHeaders,
+        });
+        if (!res.ok) throw new Error(`list summary views ${res.status}`);
+        return res.json();
+    }
+
+    async function createSummaryView(spec) {
+        const res = await fetch(`${url}${PATHS.summaryViews}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...authHeaders },
+            body: JSON.stringify(spec),
+        });
+        if (!res.ok) {
+            let detail = res.statusText;
+            try {
+                const body = await res.json();
+                detail = body.detail ?? JSON.stringify(body);
+            } catch {
+                // body wasn't JSON
+            }
+            throw new Error(`create summary view ${res.status} (${detail})`);
+        }
+        return res.json();
+    }
+
+    // Force a fresh recompute for one partition. AMS runs the summarization
+    // LLM synchronously and returns the new SummaryViewPartitionResult. The
+    // continuous worker's schedule is unaffected - it'll just see a fresher
+    // cache the next time it ticks.
+    async function runSummaryViewPartition(viewId, group) {
+        const res = await fetch(
+            `${url}${PATHS.summaryViewPartitionRun(viewId)}`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json", ...authHeaders },
+                body: JSON.stringify({ group }),
+            },
+        );
+        if (!res.ok) throw new Error(`run partition ${res.status}`);
+        return res.json();
+    }
+
+    // Filters (user_id / session_id / namespace / memory_type) are query
+    // params on the endpoint - AMS scopes the returned partitions to records
+    // that match, so we don't have to filter client-side.
+    async function listSummaryViewPartitions(viewId, filters = {}) {
+        const params = new URLSearchParams();
+        if (filters.user_id) params.set("user_id", filters.user_id);
+        if (filters.session_id) params.set("session_id", filters.session_id);
+        if (filters.namespace) params.set("namespace", filters.namespace);
+        if (filters.memory_type) params.set("memory_type", filters.memory_type);
+        const qs = params.toString();
+        const path =
+            PATHS.summaryViewPartitions(viewId) + (qs ? `?${qs}` : "");
+        const res = await fetch(`${url}${path}`, { headers: authHeaders });
+        if (!res.ok) throw new Error(`list partitions ${res.status}`);
+        return res.json();
+    }
+
     async function deleteLongTermMemory(memoryIds) {
         const ids = Array.isArray(memoryIds) ? memoryIds : [memoryIds];
         const qs = ids
@@ -151,5 +218,9 @@ export function createOssClient(cfg) {
         discoverFilters,
         deleteWorkingMemory,
         deleteLongTermMemory,
+        listSummaryViews,
+        createSummaryView,
+        listSummaryViewPartitions,
+        runSummaryViewPartition,
     };
 }
