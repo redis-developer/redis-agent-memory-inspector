@@ -11,9 +11,18 @@ import { formatDateTime, relativeTime } from "../lib/format.js";
 
 const seenIds = new Set();
 
-/** Clear the seen-id tracking. Called when connecting to a fresh session. */
+/**
+ * Wipe the pane back to its empty state. Called when connecting to a fresh
+ * session (or when reconfiguring) - clears both the seen-id tracking and
+ * the rendered DOM so a subsequent `render()` doesn't briefly show stale
+ * cards from the previous session.
+ */
 export function reset() {
     seenIds.clear();
+    $("working-list").innerHTML = "";
+    $("working-stats").textContent = "-";
+    $("working-summary").hidden = true;
+    $("working-summary-text").textContent = "";
 }
 
 /**

@@ -198,6 +198,98 @@ body:has(#theme-toggle:checked) .app-icon {
     font-weight: 700;
 }
 
+/*
+ * Picker pill - a clickable variant of the connection pill. Shares the
+ * pill chrome so static and interactive pills line up in the header, but
+ * adds a caret + hover state and renders a popover combobox underneath
+ * when opened. The wrapper is positioned so the popover anchors to it.
+ */
+.pill-picker {
+    position: relative;
+    display: inline-flex;
+}
+
+.pill-picker .pill-button {
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    line-height: 1.4;
+    color: var(--color-text-secondary);
+    background: var(--color-bg-tertiary);
+    border: 1px solid var(--color-border);
+    transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.pill-picker .pill-button:hover,
+.pill-picker.is-open .pill-button {
+    background: var(--color-bg-secondary);
+    border-color: var(--color-border-strong);
+}
+
+.pill-picker .pill-caret {
+    color: var(--color-text-muted);
+    font-size: 0.625rem;
+    margin-left: 0.15rem;
+    transition: transform 0.12s ease;
+}
+
+.pill-picker.is-open .pill-caret {
+    transform: rotate(180deg);
+}
+
+.pill-popover {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 50;
+    min-width: 260px;
+    padding: var(--spacing-xs);
+    background: var(--color-bg-primary);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--border-radius);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+}
+
+.pill-popover .pill-search {
+    width: 100%;
+    padding: 6px 8px;
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
+    color: var(--color-text);
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    outline: none;
+}
+
+.pill-popover .pill-search:focus {
+    border-color: var(--color-primary);
+}
+
+.pill-pop-actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.pill-pop-apply {
+    background: var(--color-primary);
+    color: #fff;
+    border: none;
+    border-radius: var(--border-radius);
+    padding: 4px 12px;
+    font-family: var(--font-display);
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.pill-pop-apply:hover {
+    filter: brightness(1.05);
+}
+
 .link-btn {
     background: none;
     border: none;
@@ -264,9 +356,55 @@ body:has(#theme-toggle:checked) .theme-toggle-btn::before {
 .connect-panel {
     flex: 1;
     display: flex;
+    flex-direction: column;
     align-items: center;
-    justify-content: center;
-    padding: var(--spacing-lg);
+    /* Top-align so the intro stays put when the cloud fields expand the
+     * card. Centering caused the whole stack to bounce vertically on
+     * backend toggle. */
+    justify-content: flex-start;
+    gap: var(--spacing-md);
+    padding: 3rem var(--spacing-lg) var(--spacing-lg);
+}
+
+/*
+ * Intro block above the connect form. Tells first-time visitors what
+ * Redis Agent Memory is and what the inspector does. Width is matched to
+ * the connect card so they line up as one visual unit.
+ */
+.connect-intro {
+    width: 100%;
+    max-width: 28.75rem;
+    color: var(--color-text-secondary);
+    font-size: 0.875rem;
+    line-height: 1.55;
+}
+
+.connect-intro p {
+    margin: 0 0 var(--spacing-xs) 0;
+}
+
+.connect-intro p:last-child {
+    margin-bottom: 0;
+}
+
+.connect-intro strong {
+    color: var(--color-text);
+}
+
+.connect-intro em {
+    font-style: normal;
+    color: var(--color-text);
+    font-weight: 600;
+}
+
+.connect-intro a {
+    color: var(--color-primary);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.connect-intro a strong {
+    color: inherit;
 }
 
 .connect-card {
@@ -542,6 +680,15 @@ body:has(#theme-toggle:checked) .theme-toggle-btn::before {
     border-bottom-color: var(--color-role-accent);
     background: var(--color-role-accent-bg);
     font-weight: 600;
+}
+.pane-tab.is-disabled,
+.pane-tab[disabled] {
+    color: var(--color-text-muted);
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+.pane-tab.is-disabled:hover {
+    color: var(--color-text-muted);
 }
 
 .summary-banner {

@@ -68,6 +68,24 @@
 
         <!-- Connect panel: shown when no config is available. -->
         <section id="connect-panel" class="connect-panel" hidden>
+            <div class="connect-intro">
+                <p>
+                    <a
+                        href="https://redis.io/agent-memory/"
+                        target="_blank"
+                        rel="noopener"
+                    ><strong>Redis Agent Memory</strong></a>
+                    gives AI agents short-term memory for the active
+                    session, plus persistent long-term memory across
+                    sessions.
+                </p>
+                <p>
+                    Use <strong>Redis Agent Memory Inspector</strong> to
+                    watch your agent's working memory in real time,
+                    inspect extracted facts, and debug what gets stored
+                    in long-term memory.
+                </p>
+            </div>
             <div class="connect-card">
                 <div class="field">
                     <span class="field-label">Backend</span>
@@ -142,43 +160,6 @@
                         autocomplete="off"
                         spellcheck="false"
                     />
-                </label>
-
-                <label class="field" id="field-namespace" hidden>
-                    <span class="field-label">Namespace</span>
-                    <select id="cfg-namespace"></select>
-                </label>
-
-                <label class="field">
-                    <span class="field-label">
-                        User ID
-                        <span class="field-hint" id="cfg-user-hint"></span>
-                    </span>
-                    <input
-                        id="cfg-user"
-                        type="text"
-                        list="cfg-user-options"
-                        placeholder="Pick or type a user_id…"
-                        autocomplete="off"
-                        spellcheck="false"
-                    />
-                    <datalist id="cfg-user-options"></datalist>
-                </label>
-
-                <label class="field">
-                    <span class="field-label">
-                        Session ID
-                        <span class="field-hint" id="cfg-session-hint"></span>
-                    </span>
-                    <input
-                        id="cfg-session"
-                        type="text"
-                        list="cfg-session-options"
-                        placeholder="Pick or type a session_id…"
-                        autocomplete="off"
-                        spellcheck="false"
-                    />
-                    <datalist id="cfg-session-options"></datalist>
                 </label>
 
                 <label class="field">

@@ -103,9 +103,18 @@ let searchDebounce = null;
 let onChangeCallback = null;
 let onDeleteCallback = null;
 
+// Cached context (userId + namespace) so the subtitle can re-derive itself
+// when the scope tab changes without the caller having to push context
+// again. `index.js` calls `setContext({ ... })` after every cfg mutation.
+let context = { userId: null, namespace: null, hasSession: false };
+
 export function reset() {
     seenIds.clear();
     setSummary(null);
+    // Wipe the rendered list + stats so stale cards don't linger across a
+    // reconfigure. The next `render()` will repaint from the new fetch.
+    $("longterm-list").innerHTML = "";
+    $("longterm-stats").textContent = "-";
 }
 
 export function getFilter() {
@@ -152,30 +161,87 @@ export function init({ onChange, onDelete }) {
 
     // Tabs: pick a button by `data-scope`, mirror state into `scope`, update
     // pressed visuals + subtitle, and fire onChange so the caller refetches
-    // with the new filter.
+    // with the new filter. The "session" tab refuses to activate when no
+    // session is currently selected - setContext() disables it visually,
+    // but a guard here keeps keyboard activation honest too.
     for (const tab of document.querySelectorAll(".pane-tab")) {
         tab.addEventListener("click", () => {
             const next = tab.dataset.scope;
             if (!next || next === scope) return;
+            if (next === "session" && !context.hasSession) return;
             scope = next;
-            for (const t of document.querySelectorAll(".pane-tab")) {
-                const isActive = t.dataset.scope === scope;
-                t.classList.toggle("is-active", isActive);
-                t.setAttribute("aria-selected", String(isActive));
-            }
-            const subtitle = $("longterm-subtitle");
-            if (subtitle) {
-                subtitle.textContent =
-                    scope === "session"
-                        ? "for the connected session only"
-                        : "across all sessions for this user";
-            }
+            paintActiveTab();
+            updateSubtitle();
             // Reset the "is-new" highlight when switching scopes - the set
             // of visible memories changes completely, and stale ids would
             // leave previously-seen records unflashed in the new view.
             seenIds.clear();
             onChangeCallback?.();
         });
+    }
+}
+
+/**
+ * Push the current filter context into the panel. Two effects:
+ *
+ *   1. Disable "This session" tab when there's no session to scope to. If
+ *      the tab was active when session got cleared, fall back to "all" and
+ *      fire onChange so the caller repaints with the broader scope.
+ *   2. Re-derive the subtitle text from the userId / namespace so it
+ *      accurately describes what's actually being filtered.
+ *
+ * Called by index.js after every cfg mutation (initial connect + every
+ * picker-pill change).
+ */
+export function setContext({ userId, namespace, hasSession }) {
+    context = { userId, namespace, hasSession };
+
+    const sessionTab = document.querySelector('.pane-tab[data-scope="session"]');
+    if (sessionTab) {
+        sessionTab.disabled = !hasSession;
+        sessionTab.classList.toggle("is-disabled", !hasSession);
+        if (hasSession) {
+            sessionTab.removeAttribute("title");
+            sessionTab.setAttribute("aria-disabled", "false");
+        } else {
+            sessionTab.setAttribute("title", "Pick a session to scope to");
+            sessionTab.setAttribute("aria-disabled", "true");
+        }
+    }
+
+    // If session went away mid-flight, demote scope back to "all" so the
+    // user isn't stuck looking at an empty session-filtered list.
+    if (!hasSession && scope === "session") {
+        scope = "all";
+        paintActiveTab();
+        seenIds.clear();
+        onChangeCallback?.();
+    }
+
+    updateSubtitle();
+}
+
+function paintActiveTab() {
+    for (const t of document.querySelectorAll(".pane-tab")) {
+        const isActive = t.dataset.scope === scope;
+        t.classList.toggle("is-active", isActive);
+        t.setAttribute("aria-selected", String(isActive));
+    }
+}
+
+function updateSubtitle() {
+    const subtitle = $("longterm-subtitle");
+    if (!subtitle) return;
+    if (scope === "session") {
+        subtitle.textContent = "for the connected session only";
+        return;
+    }
+    if (context.userId) {
+        subtitle.textContent = "across all sessions for this user";
+    } else if (context.namespace) {
+        subtitle.textContent = `across all sessions in "${context.namespace}"`;
+    } else {
+        subtitle.textContent = "across all sessions";
     }
 }
 

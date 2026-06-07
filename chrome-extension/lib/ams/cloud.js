@@ -235,7 +235,11 @@ export function createCloudClient(cfg) {
         else if (!hasFilter) body.text = " ";
         if (hasFilter) {
             body.filter = cloudFilter;
-            body.filterOp = "any";
+            // AND across filter keys so scoping (ownerId, sessionId) and
+            // narrowing (topics, entities) compose. OSS does this implicitly;
+            // Cloud needs `filterOp: "all"` explicitly. Within each
+            // `{any: [...]}` list the values stay OR'd.
+            body.filterOp = "all";
         }
         // Namespace doesn't exist on cloud - silently ignore.
         void namespace;
@@ -259,9 +263,11 @@ export function createCloudClient(cfg) {
             body: { text: " " },
         });
         const items = data?.items ?? [];
+        // Preserve scan order so the first owner in the list is the most
+        // recently active - auto-pick in index.js relies on this.
         const users = [
             ...new Set(items.map((m) => m.ownerId).filter(Boolean)),
-        ].sort();
+        ];
         return { users, namespaces: [] };
     }
 

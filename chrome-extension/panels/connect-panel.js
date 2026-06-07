@@ -1,8 +1,12 @@
 /**
- * Connect panel - the AMS-URL / user / session form shown when the inspector
- * window opens. Probes AMS's health, derives users and namespaces from a
- * single long-term-memory scan, and lists sessions for the selected user
- * so the dropdowns autofill from real data.
+ * Connect panel - the AMS-URL / namespace / refresh-cadence form shown when
+ * the inspector window opens. Probes AMS's health and lists discoverable
+ * namespaces so the dropdown autofills from real data.
+ *
+ * User + session selection happens in the inspector view after connect (see
+ * the picker pills in index.js). The connect panel deliberately doesn't
+ * surface those - they're a "which slice of the data am I looking at" choice,
+ * not a "how do I reach the server" choice.
  *
  * The panel doesn't own the cfg - it gathers values and hands them to the
  * caller via `onConnect(cfg)` once the user clicks Connect. The caller
@@ -21,9 +25,9 @@ function selectedBackend() {
 }
 
 /**
- * Build a temporary client for connect-time probes (health, discovery,
- * session listing). The user hasn't committed yet, so we don't store this -
- * we build a fresh one per probe against whatever's currently in the form.
+ * Build a temporary client for connect-time probes (health, discovery).
+ * The user hasn't committed yet, so we don't store this - we build a fresh
+ * one per probe against whatever's currently in the form.
  *
  * For cloud, we need all three of url + apiKey + storeId before a probe is
  * even meaningful; return null until they're all set so the URL-debounced
@@ -54,7 +58,6 @@ function probeClient() {
 
 const HEALTH_DEBOUNCE_MS = 1000;
 let healthDebounce = null;
-let userDebounce = null;
 let onConnectCallback = null;
 
 function setStatus(s) {
@@ -113,14 +116,9 @@ export function show({ seed = {}, onConnect }) {
     $("cfg-store-id").addEventListener("input", onUrlInput);
     $("cfg-proxy-url").addEventListener("input", onUrlInput);
 
-    // Select-all on focus for all text inputs in the connect panel. Without
-    // this, clicking into a pre-filled field lands the cursor at the end and
-    // typing appends (e.g. "ashwin" + typed "ashwin" → "ashwinashwin"). With
-    // this, a single click highlights the value and the next keystroke
-    // replaces it - standard combobox UX.
-    for (const id of ["cfg-url", "cfg-user", "cfg-session"]) {
-        $(id).addEventListener("focus", (e) => e.target.select());
-    }
+    // Select-all on focus for the URL input. Without this, clicking into a
+    // pre-filled field lands the cursor at the end and typing appends.
+    $("cfg-url").addEventListener("focus", (e) => e.target.select());
 
     // Pre-fill refresh-interval inputs from seed cfg if it has them. The cfg
     // stores intervals in milliseconds; the inputs work in seconds because
@@ -132,37 +130,13 @@ export function show({ seed = {}, onConnect }) {
         $("cfg-longterm-refresh").value = Math.round(seed.longTermMemoryRefreshMs / 1000);
     }
 
-    // User input is a combobox (<input list> + <datalist>). We need both
-    // `input` (typing) and `change` (datalist-pick) events. Debounce session
-    // refresh so we don't refire on every keystroke.
-    const userInput = $("cfg-user");
-    const onUserChange = () => {
-        clearTimeout(userDebounce);
-        userDebounce = setTimeout(() => refreshSessionDropdown(), 250);
-        updateConnectButton();
-    };
-    userInput.addEventListener("input", onUserChange);
-    userInput.addEventListener("change", onUserChange);
-
-    $("cfg-namespace").addEventListener("change", () => {
-        // Namespace change only affects the session list (which filters by
-        // namespace); user discovery returns all distinct users regardless.
-        // Re-running full discovery here would also re-populate this very
-        // dropdown and clobber the user's selection back to "(none)".
-        refreshSessionDropdown();
-        updateConnectButton();
-    });
-
-    const sessionInput = $("cfg-session");
-    sessionInput.addEventListener("input", updateConnectButton);
-    sessionInput.addEventListener("change", updateConnectButton);
-
     $("connect-btn").addEventListener("click", () => {
         const cfg = readFormCfg();
         onConnectCallback?.(cfg);
     });
 
-    // Kick off discovery immediately so dropdowns populate from current URL.
+    // Kick off discovery immediately so the namespace dropdown populates from
+    // the current URL.
     runDiscovery(seed);
 }
 
@@ -178,9 +152,13 @@ function readFormCfg() {
     const cfg = {
         backend,
         url: $("cfg-url").value.trim().replace(/\/+$/, ""),
-        userId: $("cfg-user").value.trim() || null,
-        sessionId: $("cfg-session").value.trim() || null,
-        namespace: $("cfg-namespace").value || null,
+        // userId + sessionId are picked in the inspector view (header
+        // pills), not here. Left null until the auto-pick runs.
+        userId: null,
+        sessionId: null,
+        // Namespace is picked in the inspector view (header pill), not here.
+        // Left null until autoPickFilters runs.
+        namespace: null,
         workingMemoryRefreshMs: workingSec * 1000,
         longTermMemoryRefreshMs: longTermSec * 1000,
     };
@@ -196,11 +174,9 @@ function readFormCfg() {
 }
 
 function isCompleteCfg(cfg) {
-    // userId is optional - some apps (e.g. redish) key by namespace+sessionId
-    // and never set user_id. For cloud, the apiKey + storeId are required -
-    // the request is unauthenticated without them and the path is malformed
-    // without storeId.
-    if (!cfg?.url || !cfg?.sessionId) return false;
+    // Only the connection bits matter here. user_id + session_id are
+    // resolved after connect via the picker pills.
+    if (!cfg?.url) return false;
     if (cfg.backend === "cloud") {
         if (!cfg.apiKey || !cfg.storeId) return false;
     }
@@ -209,8 +185,7 @@ function isCompleteCfg(cfg) {
 
 /**
  * Toggle visibility of fields that only apply to a specific backend. Cloud
- * uses storeId + apiKey; namespaces don't exist on cloud, so we hide that
- * field regardless of what discovery returned.
+ * uses storeId + apiKey + proxy URL; OSS uses neither.
  */
 function applyBackendVisibility() {
     const backend = selectedBackend();
@@ -218,10 +193,6 @@ function applyBackendVisibility() {
     $("field-store-id").hidden = !isCloud;
     $("field-api-key").hidden = !isCloud;
     $("field-proxy-url").hidden = !isCloud;
-    if (isCloud) {
-        // Cloud has no namespace concept; force-hide.
-        $("field-namespace").hidden = true;
-    }
 }
 
 function updateConnectButton() {
@@ -235,7 +206,11 @@ function onUrlInput() {
     healthDebounce = setTimeout(() => runDiscovery(), HEALTH_DEBOUNCE_MS);
 }
 
-async function runDiscovery(seed = null) {
+async function runDiscovery(_seed = null) {
+    // The connect panel only verifies the server is reachable. Namespaces,
+    // users, and sessions are discovered in the inspector view after connect
+    // so they can be flipped from the header picker pills without
+    // reconnecting.
     const probe = probeClient();
     if (!probe) return;
 
@@ -246,6 +221,8 @@ async function runDiscovery(seed = null) {
     if (health.ok) {
         badge.textContent = "✓ live";
         badge.className = "health-badge is-live";
+        updateConnectButton();
+        setStatus("Ready.");
     } else {
         badge.textContent = health.status ? `✗ ${health.status}` : "✗ unreachable";
         badge.className = "health-badge is-dead";
@@ -254,117 +231,5 @@ async function runDiscovery(seed = null) {
         // just the status code.
         const why = health.detail ? `: ${health.detail}` : "";
         setStatus(`No response from ${url} (${health.status || "no response"})${why}`);
-        return;
-    }
-
-    setStatus("Scanning memories to populate filters…");
-    let discovered;
-    try {
-        discovered = await probe.discoverFilters();
-    } catch (err) {
-        setStatus(`Discovery failed: ${err.message}`);
-        return;
-    }
-
-    populateSelect(
-        $("cfg-namespace"),
-        discovered.namespaces,
-        seed?.namespace ?? null,
-        { allowNone: true },
-    );
-    $("field-namespace").hidden = discovered.namespaces.length === 0;
-
-    populateDatalist($("cfg-user-options"), discovered.users);
-    if (seed?.userId) {
-        $("cfg-user").value = seed.userId;
-    } else if (discovered.users.length === 1) {
-        $("cfg-user").value = discovered.users[0];
-    }
-    $("cfg-user-hint").textContent = discovered.users.length
-        ? `${discovered.users.length} discovered - pick or type a new one (optional)`
-        : "no users discovered - leave empty or type one (optional)";
-
-    await refreshSessionDropdown(seed?.sessionId ?? null);
-    updateConnectButton();
-    setStatus(
-        `Ready - ${discovered.users.length} user(s), ${discovered.namespaces.length} namespace(s) discovered.`,
-    );
-}
-
-async function refreshSessionDropdown(preselect = null) {
-    const probe = probeClient();
-    const userId = $("cfg-user").value.trim();
-    const namespace = $("cfg-namespace").value || null;
-
-    if (!probe) {
-        populateDatalist($("cfg-session-options"), []);
-        $("cfg-session-hint").textContent = "set a server URL first";
-        return;
-    }
-
-    try {
-        // userId is optional - AMS's /v1/working-memory/ accepts namespace
-        // alone (or no filter), useful for apps that don't tag user_id.
-        const sessions = await probe.listSessions(userId || null, namespace);
-        populateDatalist($("cfg-session-options"), sessions);
-        if (preselect && sessions.includes(preselect)) {
-            $("cfg-session").value = preselect;
-        } else if (!$("cfg-session").value && sessions.length === 1) {
-            $("cfg-session").value = sessions[0];
-        }
-
-        // Hint reflects how the search was scoped.
-        const scope =
-            userId && namespace
-                ? `user "${userId}" in "${namespace}"`
-                : userId
-                  ? `user "${userId}"`
-                  : namespace
-                    ? `namespace "${namespace}"`
-                    : "all sessions";
-        $("cfg-session-hint").textContent = sessions.length
-            ? `${sessions.length} found for ${scope} - pick or type a new one`
-            : `no sessions for ${scope} - type one`;
-    } catch (err) {
-        setStatus(`Couldn't list sessions: ${err.message}`);
-    }
-}
-
-/**
- * Render a <select> with options for `values`, optionally prepending an
- * "(none)" entry. Used only for namespace, where "(none)" is a meaningful
- * explicit choice (filter by no namespace).
- */
-function populateSelect(selectEl, values, selected, opts = {}) {
-    selectEl.innerHTML = "";
-    if (opts.allowNone) {
-        const none = document.createElement("option");
-        none.value = "";
-        none.textContent = "(none)";
-        selectEl.appendChild(none);
-    }
-    for (const v of values) {
-        const opt = document.createElement("option");
-        opt.value = v;
-        opt.textContent = v;
-        selectEl.appendChild(opt);
-    }
-    if (selected && [...selectEl.options].some((o) => o.value === selected)) {
-        selectEl.value = selected;
-    }
-}
-
-/**
- * Fill a <datalist> with suggestion <option>s. Paired with an `<input list>`
- * elsewhere to give a native browser combobox - pick a known value or type a
- * new one. AMS doesn't expose first-class user/session enumeration, so this
- * is how we surface what we derived from a long-term-memory scan.
- */
-function populateDatalist(datalistEl, values) {
-    datalistEl.innerHTML = "";
-    for (const v of values) {
-        const opt = document.createElement("option");
-        opt.value = v;
-        datalistEl.appendChild(opt);
     }
 }
