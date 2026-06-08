@@ -44,21 +44,52 @@
             </div>
             <div class="header-right">
                 <div id="connection-pills" class="connection-pills" hidden></div>
+                <!--
+                    Templates for pills rendered into #connection-pills above.
+                    Cloned + populated in index.js (staticPill / pickerPill).
+                -->
+                <template id="static-pill-template">
+                    <span class="pill">
+                        <span class="pill-key"></span>
+                        <span class="pill-value"></span>
+                    </span>
+                </template>
+                <template id="picker-pill-template">
+                    <span class="pill-picker">
+                        <button type="button" class="pill pill-button">
+                            <span class="pill-key"></span>
+                            <span class="pill-value"></span>
+                            <span class="pill-caret" aria-hidden="true">▾</span>
+                        </button>
+                        <div class="pill-popover" hidden>
+                            <input
+                                type="text"
+                                class="pill-search"
+                                autocomplete="off"
+                                spellcheck="false"
+                            />
+                            <datalist></datalist>
+                            <div class="pill-popover-actions">
+                                <button type="button" class="pill-popover-apply">Apply</button>
+                            </div>
+                        </div>
+                    </span>
+                </template>
                 <button
-                    id="refresh-btn"
-                    class="icon-btn"
+                    id="refresh-button"
+                    class="icon-button"
                     title="Fetch working + long-term memory now"
                     aria-label="Refresh"
                     hidden
                 >
                     ↻
                 </button>
-                <button id="reconfigure-btn" class="link-btn" hidden>
+                <button id="reconfigure-button" class="link-button" hidden>
                     Reconfigure
                 </button>
                 <label
                     for="theme-toggle"
-                    class="icon-btn theme-toggle-btn"
+                    class="icon-button theme-toggle-button"
                     title="Toggle dark mode"
                     aria-label="Toggle dark mode"
                     tabindex="0"
@@ -93,7 +124,7 @@
                         <label class="backend-option">
                             <input
                                 type="radio"
-                                name="cfg-backend"
+                                name="config-backend"
                                 value="oss"
                                 checked
                             />
@@ -102,7 +133,7 @@
                         <label class="backend-option">
                             <input
                                 type="radio"
-                                name="cfg-backend"
+                                name="config-backend"
                                 value="cloud"
                             />
                             <span>Redis Cloud</span>
@@ -114,7 +145,7 @@
                     <span class="field-label">Redis Agent Memory Server URL / Endpoint</span>
                     <span class="field-row">
                         <input
-                            id="cfg-url"
+                            id="config-url"
                             type="url"
                             placeholder="http://localhost:8000"
                             autocomplete="off"
@@ -127,7 +158,7 @@
                 <label class="field cloud-only" id="field-store-id" hidden>
                     <span class="field-label">Store ID</span>
                     <input
-                        id="cfg-store-id"
+                        id="config-store-id"
                         type="text"
                         placeholder="cf1dbfd...d5afd0"
                         autocomplete="off"
@@ -138,7 +169,7 @@
                 <label class="field cloud-only" id="field-api-key" hidden>
                     <span class="field-label">API Key</span>
                     <input
-                        id="cfg-api-key"
+                        id="config-api-key"
                         type="password"
                         placeholder="mem1_…"
                         autocomplete="off"
@@ -154,7 +185,7 @@
                         </span>
                     </span>
                     <input
-                        id="cfg-proxy-url"
+                        id="config-proxy-url"
                         type="url"
                         placeholder="leave empty to use the default proxy"
                         autocomplete="off"
@@ -168,7 +199,7 @@
                         <span class="field-hint">in seconds - how often to re-fetch the live conversation (default: 3)</span>
                     </span>
                     <input
-                        id="cfg-working-refresh"
+                        id="config-working-refresh"
                         type="number"
                         min="1"
                         max="3600"
@@ -183,7 +214,7 @@
                         <span class="field-hint">in seconds - how often to re-fetch durable memories (default: 5)</span>
                     </span>
                     <input
-                        id="cfg-longterm-refresh"
+                        id="config-longterm-refresh"
                         type="number"
                         min="1"
                         max="3600"
@@ -193,7 +224,7 @@
                 </label>
 
                 <div class="connect-actions">
-                    <button id="connect-btn" class="primary-btn" type="button" disabled>
+                    <button id="connect-button" class="primary-button" type="button" disabled>
                         Connect
                     </button>
                 </div>
@@ -212,8 +243,8 @@
                     <div class="pane-header-right">
                         <span id="working-stats" class="pane-stats">-</span>
                         <button
-                            id="working-clear-btn"
-                            class="pane-danger-btn"
+                            id="working-clear-button"
+                            class="pane-danger-button"
                             type="button"
                             title="Delete all messages in this session"
                             aria-label="Clear working memory"
@@ -221,6 +252,23 @@
                     </div>
                 </header>
                 <ul id="working-list" class="card-list" role="list"></ul>
+                <!--
+                    Template for each message card rendered into the
+                    working-list above. Populated in
+                    working-memory-panel.js render().
+                -->
+                <template id="working-card-template">
+                    <li>
+                        <article class="card">
+                            <div class="card-meta">
+                                <span class="role-tag"></span>
+                                <time hidden></time>
+                                <span class="extracted-flag" hidden></span>
+                            </div>
+                            <p class="card-text"></p>
+                        </article>
+                    </li>
+                </template>
                 <section
                     id="working-summary"
                     class="summary-block"
@@ -317,8 +365,61 @@
                         </label>
                     </div>
                     <div id="ltm-active-filters" class="active-filters"></div>
+                    <!--
+                        Template for active-filter pills rendered into
+                        #ltm-active-filters above. Cloned per active filter
+                        in long-term-memory-panel.js renderActiveFilters().
+                    -->
+                    <template id="filter-pill-template">
+                        <span class="filter-pill">
+                            <span class="filter-pill-key"></span>
+                            <span class="filter-pill-value"></span>
+                            <button
+                                type="button"
+                                class="filter-pill-remove"
+                                title="Remove this filter"
+                            >×</button>
+                        </span>
+                    </template>
                 </div>
                 <ul id="longterm-list" class="card-list" role="list"></ul>
+                <!--
+                    Templates for cards + chip rows + chips rendered into
+                    the longterm-list above. Populated in
+                    long-term-memory-panel.js render() / renderChipRow().
+                -->
+                <template id="longterm-card-template">
+                    <li>
+                        <article class="card">
+                            <div class="card-meta">
+                                <span class="type-badge"></span>
+                                <time hidden></time>
+                                <span class="card-meta-session" hidden>
+                                    from session: <code></code>
+                                </span>
+                                <span class="card-id" hidden></span>
+                                <span class="score-badge" hidden></span>
+                                <button
+                                    type="button"
+                                    class="card-delete-button"
+                                    title="Delete this memory"
+                                    aria-label="Delete memory"
+                                    hidden
+                                >✕</button>
+                            </div>
+                            <p class="card-text"></p>
+                        </article>
+                    </li>
+                </template>
+                <template id="chip-row-template">
+                    <div class="chip-row">
+                        <span class="chip-row-label"></span>
+                        <div class="chip-row-chips"></div>
+                    </div>
+                </template>
+                <template id="chip-template">
+                    <button type="button" class="chip"></button>
+                </template>
             </section>
         </main>
 

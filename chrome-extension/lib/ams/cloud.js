@@ -64,10 +64,10 @@ const HEADERS = (apiKey) => ({
     Accept: "application/json",
 });
 
-export function createCloudClient(cfg) {
-    const { url, apiKey, storeId } = cfg;
-    if (!apiKey) throw new Error("cloud client: cfg.apiKey is required");
-    if (!storeId) throw new Error("cloud client: cfg.storeId is required");
+export function createCloudClient(config) {
+    const { url, apiKey, storeId } = config;
+    if (!apiKey) throw new Error("cloud client: config.apiKey is required");
+    if (!storeId) throw new Error("cloud client: config.storeId is required");
 
     // Build the base URL. If a proxy is configured (the common case while
     // Cloudflare's managed challenge is in the way), the request goes to
@@ -75,12 +75,12 @@ export function createCloudClient(cfg) {
     // own host and forwards to <upstream-host>/v1/stores/<storeId>/...
     // Otherwise we hit the upstream directly.
     //
-    // cfg.proxyUrl wins over the built-in default - lets the user point at
+    // config.proxyUrl wins over the built-in default - lets the user point at
     // a local proxy (http://localhost:8787) from the connect panel without
     // editing source.
     const cleanUrl = url.replace(/\/+$/, "");
     const upstreamHost = new URL(cleanUrl).host;
-    const effectiveProxy = cfg.proxyUrl ?? DEFAULT_CLOUD_PROXY_URL;
+    const effectiveProxy = config.proxyUrl ?? DEFAULT_CLOUD_PROXY_URL;
     const root = effectiveProxy
         ? `${effectiveProxy.replace(/\/+$/, "")}/${upstreamHost}`
         : cleanUrl;

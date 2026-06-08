@@ -7,12 +7,12 @@
  *      then start the visibility-aware poller.
  *
  * The inspector holds no persistent state - every open of the window starts
- * from a clean connect form. `cfg` lives only in this module for the
+ * from a clean connect form. `config` lives only in this module for the
  * lifetime of the window. User + session can be re-picked at any time from
  * the header picker pills without reconnecting.
  */
 
-import { $, escape } from "./lib/dom.js";
+import { $, fromTemplate } from "./lib/dom.js";
 import { createAmsClient } from "./lib/ams-client.js";
 import { createPoller } from "./lib/polling.js";
 import { timeStr } from "./lib/format.js";
@@ -21,12 +21,12 @@ import * as workingPanel from "./panels/working-memory-panel.js";
 import * as longTermPanel from "./panels/long-term-memory-panel.js";
 import * as connectPanel from "./panels/connect-panel.js";
 
-// Fallback poll cadences when the cfg from the connect panel doesn't supply
+// Fallback poll cadences when the config from the connect panel doesn't supply
 // explicit values (the form provides them by default, so this rarely fires).
 const WORKING_MEMORY_REFRESH_MS = 3000;
 const LONG_TERM_MEMORY_REFRESH_MS = 5000;
 
-let cfg = null;
+let config = null;
 let poller = null;
 let client = null; // backend-specific AMS client, created on connect
 let summaryViewIds = null; // { userProfileViewId, sessionProfileViewId } | null
@@ -42,16 +42,16 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     connectPanel.show({ seed: {}, onConnect: connect });
 
-    $("reconfigure-btn").addEventListener("click", () => {
+    $("reconfigure-button").addEventListener("click", () => {
         poller?.stop();
-        connectPanel.show({ seed: cfg ?? {}, onConnect: connect });
+        connectPanel.show({ seed: config ?? {}, onConnect: connect });
     });
 
-    $("refresh-btn").addEventListener("click", refreshNow);
+    $("refresh-button").addEventListener("click", refreshNow);
 
     // Working-memory clear: session-level deletion. Confirms before firing
     // because the operation is destructive (no soft delete, no undo).
-    $("working-clear-btn").addEventListener("click", handleWorkingClear);
+    $("working-clear-button").addEventListener("click", handleWorkingClear);
 
     // Summary-view refresh: forces AMS to re-run the LLM for the active
     // scope's partition. Disabled while in flight to prevent concurrent
@@ -67,17 +67,17 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
 });
 
-async function connect(newCfg) {
-    cfg = newCfg;
-    client = createAmsClient(cfg);
+async function connect(newConfig) {
+    config = newConfig;
+    client = createAmsClient(config);
     workingPanel.reset();
     longTermPanel.reset();
 
     $("connect-panel").hidden = true;
     $("inspector-view").hidden = false;
     $("connection-pills").hidden = false;
-    $("reconfigure-btn").hidden = false;
-    $("refresh-btn").hidden = false;
+    $("reconfigure-button").hidden = false;
+    $("refresh-button").hidden = false;
 
     // Pick the most recent namespace + user + session before the first poll
     // fires. If discovery finds nothing for any of them, leave that field
@@ -86,9 +86,9 @@ async function connect(newCfg) {
     await autoPickFilters();
     renderConnectionPills();
     longTermPanel.setContext({
-        userId: cfg.userId,
-        namespace: cfg.namespace,
-        hasSession: !!cfg.sessionId,
+        userId: config.userId,
+        namespace: config.namespace,
+        hasSession: !!config.sessionId,
     });
 
     // Fire-and-forget the SummaryView bootstrap. Failure leaves
@@ -99,29 +99,29 @@ async function connect(newCfg) {
     poller = createPoller({
         onWorking: pollWorking,
         onLongTerm: pollLongTerm,
-        workingMs: cfg.workingMemoryRefreshMs ?? WORKING_MEMORY_REFRESH_MS,
-        longTermMs: cfg.longTermMemoryRefreshMs ?? LONG_TERM_MEMORY_REFRESH_MS,
+        workingMs: config.workingMemoryRefreshMs ?? WORKING_MEMORY_REFRESH_MS,
+        longTermMs: config.longTermMemoryRefreshMs ?? LONG_TERM_MEMORY_REFRESH_MS,
     });
     poller.start();
 }
 
 /**
- * Run discovery on the now-live client to seed cfg.namespace + cfg.userId +
- * cfg.sessionId with the most recently active values. discoverFilters()
+ * Run discovery on the now-live client to seed config.namespace + config.userId +
+ * config.sessionId with the most recently active values. discoverFilters()
  * preserves LTM-scan order, so users[0] / namespaces[0] = most recent.
  * listSessions() returns AMS-ordered sessions; we take the first.
  */
 async function autoPickFilters() {
     try {
         const { users, namespaces } = await client.discoverFilters();
-        if (namespaces.length > 0) cfg.namespace = namespaces[0];
-        if (users.length > 0) cfg.userId = users[0];
+        if (namespaces.length > 0) config.namespace = namespaces[0];
+        if (users.length > 0) config.userId = users[0];
     } catch (err) {
         setStatus(`couldn't discover filters: ${err.message}`);
     }
     try {
-        const sessions = await client.listSessions(cfg.userId, cfg.namespace);
-        if (sessions.length > 0) cfg.sessionId = sessions[0];
+        const sessions = await client.listSessions(config.userId, config.namespace);
+        if (sessions.length > 0) config.sessionId = sessions[0];
     } catch (err) {
         setStatus(`couldn't list sessions: ${err.message}`);
     }
@@ -130,14 +130,14 @@ async function autoPickFilters() {
 function renderConnectionPills() {
     const pills = $("connection-pills");
     pills.innerHTML = "";
-    pills.appendChild(staticPill("url", new URL(cfg.url).host));
+    pills.appendChild(staticPill("url", new URL(config.url).host));
 
     // Namespace pill - OSS only (Cloud has no namespace concept).
-    if (cfg.backend !== "cloud") {
+    if (config.backend !== "cloud") {
         pills.appendChild(
             pickerPill({
                 key: "ns",
-                value: cfg.namespace,
+                value: config.namespace,
                 allowNone: true,
                 getOptions: async () => {
                     const { namespaces } = await client.discoverFilters();
@@ -151,7 +151,7 @@ function renderConnectionPills() {
     pills.appendChild(
         pickerPill({
             key: "user",
-            value: cfg.userId,
+            value: config.userId,
             allowNone: true,
             getOptions: async () => {
                 const { users } = await client.discoverFilters();
@@ -163,9 +163,9 @@ function renderConnectionPills() {
     pills.appendChild(
         pickerPill({
             key: "session",
-            value: cfg.sessionId,
+            value: config.sessionId,
             allowNone: true,
-            getOptions: () => client.listSessions(cfg.userId, cfg.namespace),
+            getOptions: () => client.listSessions(config.userId, config.namespace),
             onPick: (value) => applyFilterChange({ sessionId: value }),
         }),
     );
@@ -177,7 +177,7 @@ function renderConnectionPills() {
  * listing depends on both), so we re-list sessions and auto-pick the most
  * recent. Changing only the session leaves namespace/user alone.
  *
- * After mutating cfg we re-render the pills (so the displayed values stay
+ * After mutating config we re-render the pills (so the displayed values stay
  * in sync), push the new context into the LTM panel (so the "this session"
  * tab + subtitle reflect what's actually scoped), reset the panes, and
  * trigger a fresh poll.
@@ -186,42 +186,40 @@ async function applyFilterChange({ namespace, userId, sessionId }) {
     const changedScopeKey =
         namespace !== undefined || userId !== undefined;
 
-    if (namespace !== undefined) cfg.namespace = namespace;
-    if (userId !== undefined) cfg.userId = userId;
+    if (namespace !== undefined) config.namespace = namespace;
+    if (userId !== undefined) config.userId = userId;
 
     if (changedScopeKey) {
         try {
             const sessions = await client.listSessions(
-                cfg.userId,
-                cfg.namespace,
+                config.userId,
+                config.namespace,
             );
-            cfg.sessionId = sessions[0] ?? null;
+            config.sessionId = sessions[0] ?? null;
         } catch {
-            cfg.sessionId = null;
+            config.sessionId = null;
         }
     } else if (sessionId !== undefined) {
-        cfg.sessionId = sessionId;
+        config.sessionId = sessionId;
     }
 
     renderConnectionPills();
     longTermPanel.setContext({
-        userId: cfg.userId,
-        namespace: cfg.namespace,
-        hasSession: !!cfg.sessionId,
+        userId: config.userId,
+        namespace: config.namespace,
+        hasSession: !!config.sessionId,
     });
     workingPanel.reset();
     longTermPanel.reset();
     await refreshNow();
 }
 
-/** Read-only pill (url, namespace). */
+/** Read-only pill (url, namespace). Cloned from #static-pill-template. */
 function staticPill(key, value) {
-    const el = document.createElement("span");
-    el.className = "pill";
-    el.innerHTML =
-        `<span class="pill-key">${key}</span>` +
-        `<span class="pill-value">${escape(value)}</span>`;
-    return el;
+    const element = fromTemplate("static-pill-template");
+    element.querySelector(".pill-key").textContent = key;
+    element.querySelector(".pill-value").textContent = value;
+    return element;
 }
 
 /**
@@ -231,9 +229,10 @@ function staticPill(key, value) {
 const NONE_SENTINEL = "(none)";
 
 /**
- * Clickable pill that opens a popover combobox below itself. The popover
- * has a search input (free-text + suggestion list from `getOptions`) and an
- * Apply button. Picking an option or clicking Apply fires `onPick(value)`.
+ * Clickable pill that opens a popover combobox below itself. Structure
+ * (trigger button + popover with search input, datalist, Apply) is
+ * defined in #picker-pill-template in index.html; this function clones it,
+ * fills the slots, and wires the interaction handlers.
  *
  * If `allowNone` is true, the popover surfaces a "(none)" entry at the top
  * of the suggestion list and treats either picking it or clearing the
@@ -244,62 +243,49 @@ const NONE_SENTINEL = "(none)";
  * the popover without firing.
  */
 function pickerPill({ key, value, getOptions, onPick, allowNone = false }) {
-    const wrap = document.createElement("span");
-    wrap.className = "pill-picker";
+    const wrapper = fromTemplate("picker-pill-template");
 
-    const trigger = document.createElement("button");
-    trigger.type = "button";
-    trigger.className = "pill pill-button";
-    trigger.innerHTML =
-        `<span class="pill-key">${key}</span>` +
-        `<span class="pill-value">${escape(value ?? NONE_SENTINEL)}</span>` +
-        `<span class="pill-caret" aria-hidden="true">▾</span>`;
-    wrap.appendChild(trigger);
+    wrapper.querySelector(".pill-key").textContent = key;
+    wrapper.querySelector(".pill-value").textContent = value ?? NONE_SENTINEL;
 
-    const pop = document.createElement("div");
-    pop.className = "pill-popover";
-    pop.hidden = true;
+    const popover = wrapper.querySelector(".pill-popover");
+    const input = wrapper.querySelector(".pill-search");
+    const datalist = wrapper.querySelector("datalist");
+    const apply = wrapper.querySelector(".pill-popover-apply");
+    const trigger = wrapper.querySelector(".pill-button");
 
-    const datalistId = `pill-opts-${key}-${Math.random().toString(36).slice(2, 8)}`;
-    pop.innerHTML =
-        `<input type="text" class="pill-search" list="${datalistId}" ` +
-        `placeholder="Pick or type a ${escape(key)}…" autocomplete="off" ` +
-        `spellcheck="false" />` +
-        `<datalist id="${datalistId}"></datalist>` +
-        `<div class="pill-pop-actions">` +
-        `<button type="button" class="pill-pop-apply">Apply</button>` +
-        `</div>`;
-    wrap.appendChild(pop);
-
-    const input = pop.querySelector(".pill-search");
-    const datalist = pop.querySelector("datalist");
-    const apply = pop.querySelector(".pill-pop-apply");
+    // Each cloned picker needs its own datalist id so <input list="...">
+    // points at the right list (otherwise all pickers would share suggestions).
+    const datalistId = `pill-options-${key}-${Math.random().toString(36).slice(2, 8)}`;
+    datalist.id = datalistId;
+    input.setAttribute("list", datalistId);
+    input.placeholder = `Pick or type a ${key}…`;
 
     trigger.addEventListener("click", async (e) => {
         e.stopPropagation(); // don't trip the document click-outside handler
-        if (wrap.classList.contains("is-open")) {
-            closePicker(wrap);
+        if (wrapper.classList.contains("is-open")) {
+            closePicker(wrapper);
             return;
         }
         // Close any other open pickers first.
         for (const other of document.querySelectorAll(".pill-picker.is-open")) {
-            if (other !== wrap) closePicker(other);
+            if (other !== wrapper) closePicker(other);
         }
-        wrap.classList.add("is-open");
-        pop.hidden = false;
+        wrapper.classList.add("is-open");
+        popover.hidden = false;
         input.value = value ?? "";
         // Populate the datalist lazily so we always see fresh options when
         // the user re-opens the picker. "(none)" goes first so it's the
         // most reachable choice when collapsing back to a broader scope.
         datalist.innerHTML = "";
         if (allowNone) {
-            const noneOpt = document.createElement("option");
-            noneOpt.value = NONE_SENTINEL;
-            datalist.appendChild(noneOpt);
+            const noneOption = document.createElement("option");
+            noneOption.value = NONE_SENTINEL;
+            datalist.appendChild(noneOption);
         }
         try {
-            const opts = await getOptions();
-            for (const v of opts) {
+            const options = await getOptions();
+            for (const v of options) {
                 const opt = document.createElement("option");
                 opt.value = v;
                 datalist.appendChild(opt);
@@ -313,7 +299,7 @@ function pickerPill({ key, value, getOptions, onPick, allowNone = false }) {
 
     function commit() {
         const raw = input.value.trim();
-        closePicker(wrap);
+        closePicker(wrapper);
         // Empty input or the explicit "(none)" sentinel both mean "clear
         // this filter" when the pill allows none; otherwise an empty input
         // is just a no-op (you can't unset a required field).
@@ -330,31 +316,31 @@ function pickerPill({ key, value, getOptions, onPick, allowNone = false }) {
             e.preventDefault();
             commit();
         } else if (e.key === "Escape") {
-            closePicker(wrap);
+            closePicker(wrapper);
         }
     });
     // Picking from the datalist fires `change` (not just `input`) - commit
     // straight away so the user doesn't have to click Apply.
     input.addEventListener("change", commit);
 
-    return wrap;
+    return wrapper;
 }
 
-function closePicker(wrap) {
-    wrap.classList.remove("is-open");
-    const pop = wrap.querySelector(".pill-popover");
-    if (pop) pop.hidden = true;
+function closePicker(wrapper) {
+    wrapper.classList.remove("is-open");
+    const popover = wrapper.querySelector(".pill-popover");
+    if (popover) popover.hidden = true;
 }
 
 async function pollWorking() {
-    if (!client || !cfg?.sessionId) return;
+    if (!client || !config?.sessionId) return;
     try {
-        const wm = await client.getWorkingMemory(
-            cfg.sessionId,
-            cfg.userId,
-            cfg.namespace,
+        const workingMemory = await client.getWorkingMemory(
+            config.sessionId,
+            config.userId,
+            config.namespace,
         );
-        workingPanel.render(wm);
+        workingPanel.render(workingMemory);
         setStatus(`working memory updated ${timeStr()}`);
     } catch (err) {
         setStatus(`working memory: ${err.message}`);
@@ -371,12 +357,12 @@ async function pollLongTerm() {
         const scope = longTermPanel.getScope();
         const baseFilter = longTermPanel.getFilter();
         const filter =
-            scope === "session" && cfg.sessionId
-                ? { ...baseFilter, sessionId: cfg.sessionId }
+            scope === "session" && config.sessionId
+                ? { ...baseFilter, sessionId: config.sessionId }
                 : baseFilter;
         const data = await client.searchLongTermMemory(
-            cfg.userId,
-            cfg.namespace,
+            config.userId,
+            config.namespace,
             filter,
         );
         longTermPanel.render(data.memories ?? []);
@@ -394,8 +380,8 @@ async function pollLongTerm() {
 
 async function handleSummaryRefresh() {
     if (!client || !summaryViewIds) return;
-    const btn = $("ltm-summary-refresh");
-    if (btn.disabled) return; // already in flight - prevent concurrent runs
+    const button = $("ltm-summary-refresh");
+    if (button.disabled) return; // already in flight - prevent concurrent runs
     const scope = longTermPanel.getScope();
     const viewId =
         scope === "session"
@@ -407,10 +393,10 @@ async function handleSummaryRefresh() {
     // user view by user_id only.
     const group =
         scope === "session"
-            ? { session_id: cfg.sessionId }
-            : { user_id: cfg.userId };
-    btn.disabled = true;
-    btn.classList.add("is-spinning");
+            ? { session_id: config.sessionId }
+            : { user_id: config.userId };
+    button.disabled = true;
+    button.classList.add("is-spinning");
     setStatus("recomputing summary…");
     try {
         const partition = await client.runSummaryViewPartition(viewId, group);
@@ -419,8 +405,8 @@ async function handleSummaryRefresh() {
     } catch (err) {
         setStatus(`summary refresh failed: ${err.message}`);
     } finally {
-        btn.disabled = false;
-        btn.classList.remove("is-spinning");
+        button.disabled = false;
+        button.classList.remove("is-spinning");
     }
 }
 
@@ -441,8 +427,8 @@ async function refreshSummaryBanner() {
     // partitions instead of the relevant one.
     const filters =
         scope === "session"
-            ? { session_id: cfg.sessionId }
-            : { user_id: cfg.userId };
+            ? { session_id: config.sessionId }
+            : { user_id: config.userId };
     const partitions = await client.listSummaryViewPartitions(viewId, filters);
     // Empty array → pass `{}` so the banner shows the empty-state copy
     // and keeps the ↻ refresh button reachable. Populated → pass the
@@ -451,26 +437,26 @@ async function refreshSummaryBanner() {
 }
 
 async function refreshNow() {
-    if (!cfg) return;
-    const btn = $("refresh-btn");
-    btn.classList.add("is-spinning");
-    setTimeout(() => btn.classList.remove("is-spinning"), 400);
+    if (!config) return;
+    const button = $("refresh-button");
+    button.classList.add("is-spinning");
+    setTimeout(() => button.classList.remove("is-spinning"), 400);
     await poller?.runNow();
 }
 
 async function handleWorkingClear() {
     if (!client) return;
     const ok = confirm(
-        `Clear working memory for session "${cfg.sessionId}"?\n\nAll messages and the running summary will be deleted. This cannot be undone.`,
+        `Clear working memory for session "${config.sessionId}"?\n\nAll messages and the running summary will be deleted. This cannot be undone.`,
     );
     if (!ok) return;
     try {
         await client.deleteWorkingMemory(
-            cfg.sessionId,
-            cfg.userId,
-            cfg.namespace,
+            config.sessionId,
+            config.userId,
+            config.namespace,
         );
-        setStatus(`working memory cleared for ${cfg.sessionId}`);
+        setStatus(`working memory cleared for ${config.sessionId}`);
         workingPanel.reset(); // forget seen-ids so next render flashes fresh content
         await pollWorking();
     } catch (err) {

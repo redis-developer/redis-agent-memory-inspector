@@ -1,5 +1,12 @@
 /*
  * Redis Agent Memory Inspector - styles.
+ *
+ * Uses one level of native CSS nesting per component: a component's child
+ * selectors, state variants, and dark-mode overrides are grouped inside
+ * its root selector for navigability. `&` refers to the parent selector
+ * at each level. Supported in Chrome 112+, which is fine - the inspector
+ * only targets Chrome.
+ *
  * Tokens lifted from redis-developer-catalog so this matches the rest of
  * Redis DevRel surfaces.
  */
@@ -45,7 +52,8 @@
  * variables below override the light defaults whenever #theme-toggle is
  * :checked, and every component that reads from those variables flips
  * automatically. A few sites use hardcoded chip/badge colors that don't go
- * through variables; those have their own overrides further down.
+ * through variables; those have their own per-component overrides nested
+ * inside the relevant block via `body:has(#theme-toggle:checked) &`.
  *
  * No JavaScript involved - works on any modern Chrome (the inspector's
  * only target), since `:has()` ships in Chrome 105+.
@@ -116,7 +124,24 @@ body {
     min-height: 100vh;
 }
 
-/* ---- Header ----------------------------------------------------------- */
+/* Shared animations referenced by multiple components. */
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+@keyframes card-flash {
+    0% {
+        background: var(--color-accent);
+        border-color: var(--color-accent);
+    }
+    100% {
+        background: var(--color-bg-primary);
+        border-color: var(--color-border);
+    }
+}
+
+/* styles for header */
 
 .app-header {
     display: flex;
@@ -126,6 +151,13 @@ body {
     background: var(--color-bg-primary);
     border-bottom: 1px solid var(--color-border);
     flex-shrink: 0;
+
+    & h1 {
+        font-size: 0.875rem;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        margin: 0;
+    }
 }
 
 .app-title {
@@ -138,22 +170,13 @@ body {
     width: 1.5rem;
     height: 1.5rem;
     flex-shrink: 0;
-}
 
-/*
- * The icon is duotone with hardcoded fills (#163341 + #FF4438). On dark
- * backgrounds the dusk-dark paths disappear; invert + hue-rotate flips
- * darks to lights while keeping the red recognisable as red.
- */
-body:has(#theme-toggle:checked) .app-icon {
-    filter: invert(1) hue-rotate(180deg);
-}
-
-.app-header h1 {
-    font-size: 0.875rem;
-    font-weight: 600;
-    letter-spacing: -0.01em;
-    margin: 0;
+    /* The icon is duotone with hardcoded fills (#163341 + #FF4438). On dark
+     * backgrounds the dusk-dark paths disappear; invert + hue-rotate flips
+     * darks to lights while keeping the red recognisable as red. */
+    body:has(#theme-toggle:checked) & {
+        filter: invert(1) hue-rotate(180deg);
+    }
 }
 
 /*
@@ -168,6 +191,20 @@ body:has(#theme-toggle:checked) .app-icon {
     gap: var(--spacing-sm);
     margin-left: auto;
 }
+
+.app-footer {
+    flex-shrink: 0;
+    padding: 4px var(--spacing-sm);
+    background: var(--color-bg-primary);
+    border-top: 1px solid var(--color-border);
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    color: var(--color-text-muted);
+}
+
+/* end of styles for header */
+
+/* styles for pills (static + picker) */
 
 .connection-pills {
     display: flex;
@@ -187,15 +224,15 @@ body:has(#theme-toggle:checked) .app-icon {
     font-size: 0.6875rem;
     color: var(--color-text-secondary);
     line-height: 1.4;
-}
 
-.pill .pill-key {
-    color: var(--color-text-muted);
-}
+    & .pill-key {
+        color: var(--color-text-muted);
+    }
 
-.pill .pill-value {
-    color: var(--color-text);
-    font-weight: 700;
+    & .pill-value {
+        color: var(--color-text);
+        font-weight: 700;
+    }
 }
 
 /*
@@ -207,34 +244,34 @@ body:has(#theme-toggle:checked) .app-icon {
 .pill-picker {
     position: relative;
     display: inline-flex;
-}
 
-.pill-picker .pill-button {
-    cursor: pointer;
-    font-family: var(--font-mono);
-    font-size: 0.6875rem;
-    line-height: 1.4;
-    color: var(--color-text-secondary);
-    background: var(--color-bg-tertiary);
-    border: 1px solid var(--color-border);
-    transition: background 0.12s ease, border-color 0.12s ease;
-}
+    & .pill-button {
+        cursor: pointer;
+        font-family: var(--font-mono);
+        font-size: 0.6875rem;
+        line-height: 1.4;
+        color: var(--color-text-secondary);
+        background: var(--color-bg-tertiary);
+        border: 1px solid var(--color-border);
+        transition: background 0.12s ease, border-color 0.12s ease;
+    }
 
-.pill-picker .pill-button:hover,
-.pill-picker.is-open .pill-button {
-    background: var(--color-bg-secondary);
-    border-color: var(--color-border-strong);
-}
+    & .pill-button:hover,
+    &.is-open .pill-button {
+        background: var(--color-bg-secondary);
+        border-color: var(--color-border-strong);
+    }
 
-.pill-picker .pill-caret {
-    color: var(--color-text-muted);
-    font-size: 0.625rem;
-    margin-left: 0.15rem;
-    transition: transform 0.12s ease;
-}
+    & .pill-caret {
+        color: var(--color-text-muted);
+        font-size: 0.625rem;
+        margin-left: 0.15rem;
+        transition: transform 0.12s ease;
+    }
 
-.pill-picker.is-open .pill-caret {
-    transform: rotate(180deg);
+    &.is-open .pill-caret {
+        transform: rotate(180deg);
+    }
 }
 
 .pill-popover {
@@ -251,30 +288,30 @@ body:has(#theme-toggle:checked) .app-icon {
     display: flex;
     flex-direction: column;
     gap: var(--spacing-xs);
+
+    & .pill-search {
+        width: 100%;
+        padding: 6px 8px;
+        background: var(--color-bg-secondary);
+        border: 1px solid var(--color-border);
+        border-radius: var(--border-radius);
+        color: var(--color-text);
+        font-family: var(--font-mono);
+        font-size: 0.8125rem;
+        outline: none;
+    }
+
+    & .pill-search:focus {
+        border-color: var(--color-primary);
+    }
 }
 
-.pill-popover .pill-search {
-    width: 100%;
-    padding: 6px 8px;
-    background: var(--color-bg-secondary);
-    border: 1px solid var(--color-border);
-    border-radius: var(--border-radius);
-    color: var(--color-text);
-    font-family: var(--font-mono);
-    font-size: 0.8125rem;
-    outline: none;
-}
-
-.pill-popover .pill-search:focus {
-    border-color: var(--color-primary);
-}
-
-.pill-pop-actions {
+.pill-popover-actions {
     display: flex;
     justify-content: flex-end;
 }
 
-.pill-pop-apply {
+.pill-popover-apply {
     background: var(--color-primary);
     color: #fff;
     border: none;
@@ -284,13 +321,17 @@ body:has(#theme-toggle:checked) .app-icon {
     font-size: 0.75rem;
     font-weight: 600;
     cursor: pointer;
+
+    &:hover {
+        filter: brightness(1.05);
+    }
 }
 
-.pill-pop-apply:hover {
-    filter: brightness(1.05);
-}
+/* end of styles for pills */
 
-.link-btn {
+/* styles for buttons */
+
+.link-button {
     background: none;
     border: none;
     color: var(--color-text-secondary);
@@ -299,14 +340,14 @@ body:has(#theme-toggle:checked) .app-icon {
     cursor: pointer;
     padding: 4px 8px;
     border-radius: var(--border-radius);
+
+    &:hover {
+        background: var(--color-bg-tertiary);
+        color: var(--color-text);
+    }
 }
 
-.link-btn:hover {
-    background: var(--color-bg-tertiary);
-    color: var(--color-text);
-}
-
-.icon-btn {
+.icon-button {
     background: none;
     border: 1px solid var(--color-border);
     color: var(--color-text-secondary);
@@ -320,15 +361,15 @@ body:has(#theme-toggle:checked) .app-icon {
     font-size: 0.875rem;
     line-height: 1;
     transition: transform 400ms ease, background 150ms ease, color 150ms ease;
-}
 
-.icon-btn:hover {
-    background: var(--color-bg-tertiary);
-    color: var(--color-text);
-}
+    &:hover {
+        background: var(--color-bg-tertiary);
+        color: var(--color-text);
+    }
 
-.icon-btn.is-spinning {
-    transform: rotate(360deg);
+    &.is-spinning {
+        transform: rotate(360deg);
+    }
 }
 
 /*
@@ -336,22 +377,102 @@ body:has(#theme-toggle:checked) .app-icon {
  * as the theme variables - moon when light theme is active (click to go
  * dark), sun when dark theme is active (click to go light).
  */
-.theme-toggle-btn::before {
-    content: "🌙";
+.theme-toggle-button {
+    &::before {
+        content: "🌙";
+    }
+
+    body:has(#theme-toggle:checked) &::before {
+        content: "☀️";
+    }
+
+    /* Keyboard focus ring on the label (the underlying checkbox is hidden,
+     * so focus has to be styled on the label, not the input). */
+    &:focus-visible,
+    #theme-toggle:focus-visible + * & {
+        outline: 2px solid var(--color-primary);
+        outline-offset: 2px;
+    }
 }
 
-body:has(#theme-toggle:checked) .theme-toggle-btn::before {
-    content: "☀️";
+.primary-button {
+    background: var(--color-primary);
+    color: white;
+    border: none;
+    padding: 0.5rem 1.2rem;
+    border-radius: var(--border-radius);
+    font-family: var(--font-display);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    cursor: pointer;
+
+    &:hover {
+        background: #e63d32;
+    }
+
+    &:disabled {
+        background: var(--color-border-strong);
+        cursor: not-allowed;
+    }
 }
 
-/* Keyboard focus ring on the label (since the underlying checkbox is hidden). */
-#theme-toggle:focus-visible + * .theme-toggle-btn,
-.theme-toggle-btn:focus-visible {
-    outline: 2px solid var(--color-primary);
-    outline-offset: 2px;
+/*
+ * Always-visible destructive button in the pane header. Muted by default
+ * (so it doesn't compete with the content); turns danger-red on its own
+ * hover state to signal destructive intent before the click.
+ */
+.pane-danger-button {
+    transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+    background: none;
+    border: 1px solid var(--color-border);
+    color: var(--color-text-muted);
+    cursor: pointer;
+    font-family: var(--font-display);
+    font-size: 0.625rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 2px 8px;
+    border-radius: var(--border-radius);
+
+    &:hover {
+        color: var(--color-danger);
+        border-color: var(--color-danger);
+        background: rgba(244, 67, 54, 0.08);
+    }
 }
 
-/* ---- Connect panel ---------------------------------------------------- */
+/*
+ * Per-card delete button - appears on card hover, sits at the far right of
+ * the meta row. Same hover-reveal pattern as the pane-danger-button, just
+ * scoped to the card.
+ */
+.card-delete-button {
+    opacity: 0;
+    transition: opacity 120ms ease, background 120ms ease, color 120ms ease;
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    font-size: 0.75rem;
+    line-height: 1;
+    padding: 1px 5px;
+    border-radius: 50%;
+    margin-left: 0.2rem;
+
+    .card:hover &,
+    &:focus-visible {
+        opacity: 1;
+    }
+
+    &:hover {
+        color: var(--color-danger);
+        background: rgba(244, 67, 54, 0.12);
+    }
+}
+
+/* end of styles for buttons */
+
+/* styles for connect panel */
 
 .connect-panel {
     flex: 1;
@@ -377,34 +498,34 @@ body:has(#theme-toggle:checked) .theme-toggle-btn::before {
     color: var(--color-text-secondary);
     font-size: 0.875rem;
     line-height: 1.55;
-}
 
-.connect-intro p {
-    margin: 0 0 var(--spacing-xs) 0;
-}
+    & p {
+        margin: 0 0 var(--spacing-xs) 0;
+    }
 
-.connect-intro p:last-child {
-    margin-bottom: 0;
-}
+    & p:last-child {
+        margin-bottom: 0;
+    }
 
-.connect-intro strong {
-    color: var(--color-text);
-}
+    & strong {
+        color: var(--color-text);
+    }
 
-.connect-intro em {
-    font-style: normal;
-    color: var(--color-text);
-    font-weight: 600;
-}
+    & em {
+        font-style: normal;
+        color: var(--color-text);
+        font-weight: 600;
+    }
 
-.connect-intro a {
-    color: var(--color-primary);
-    text-decoration: underline;
-    text-underline-offset: 2px;
-}
+    & a {
+        color: var(--color-primary);
+        text-decoration: underline;
+        text-underline-offset: 2px;
+    }
 
-.connect-intro a strong {
-    color: inherit;
+    & a strong {
+        color: inherit;
+    }
 }
 
 .connect-card {
@@ -422,6 +543,26 @@ body:has(#theme-toggle:checked) .theme-toggle-btn::before {
     flex-direction: column;
     gap: 0.3rem;
     margin-bottom: var(--spacing-sm);
+
+    & input,
+    & select {
+        flex: 1;
+        width: 100%;
+        padding: 0.5rem 0.7rem;
+        background: var(--color-bg-primary);
+        border: 1px solid var(--color-border);
+        border-radius: var(--border-radius);
+        font-family: var(--font-mono);
+        font-size: 0.75rem;
+        color: var(--color-text);
+    }
+
+    & input:focus,
+    & select:focus {
+        outline: none;
+        border-color: var(--color-primary);
+        box-shadow: 0 0 0 3px rgba(255, 68, 56, 0.12);
+    }
 }
 
 .field-label {
@@ -445,6 +586,12 @@ body:has(#theme-toggle:checked) .theme-toggle-btn::before {
     color: var(--color-text-muted);
 }
 
+.field-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
 .backend-options {
     display: flex;
     gap: 0.5rem;
@@ -462,42 +609,16 @@ body:has(#theme-toggle:checked) .theme-toggle-btn::before {
     font-size: 0.75rem;
     cursor: pointer;
     transition: border-color 120ms ease, background 120ms ease;
-}
 
-.backend-option:has(input:checked) {
-    border-color: var(--color-primary);
-    background: rgba(255, 68, 56, 0.05);
-}
+    &:has(input:checked) {
+        border-color: var(--color-primary);
+        background: rgba(255, 68, 56, 0.05);
+    }
 
-.backend-option input {
-    margin: 0;
-    accent-color: var(--color-primary);
-}
-
-.field-row {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.field input,
-.field select {
-    flex: 1;
-    width: 100%;
-    padding: 0.5rem 0.7rem;
-    background: var(--color-bg-primary);
-    border: 1px solid var(--color-border);
-    border-radius: var(--border-radius);
-    font-family: var(--font-mono);
-    font-size: 0.75rem;
-    color: var(--color-text);
-}
-
-.field input:focus,
-.field select:focus {
-    outline: none;
-    border-color: var(--color-primary);
-    box-shadow: 0 0 0 3px rgba(255, 68, 56, 0.12);
+    & input {
+        margin: 0;
+        accent-color: var(--color-primary);
+    }
 }
 
 .health-badge {
@@ -509,16 +630,16 @@ body:has(#theme-toggle:checked) .theme-toggle-btn::before {
     color: var(--color-text-muted);
     min-width: 3.5rem;
     text-align: center;
-}
 
-.health-badge.is-live {
-    background: rgba(45, 185, 107, 0.12);
-    color: var(--color-success);
-}
+    &.is-live {
+        background: rgba(45, 185, 107, 0.12);
+        color: var(--color-success);
+    }
 
-.health-badge.is-dead {
-    background: rgba(244, 67, 54, 0.12);
-    color: var(--color-danger);
+    &.is-dead {
+        background: rgba(244, 67, 54, 0.12);
+        color: var(--color-danger);
+    }
 }
 
 .connect-actions {
@@ -527,40 +648,21 @@ body:has(#theme-toggle:checked) .theme-toggle-btn::before {
     margin-top: var(--spacing-md);
 }
 
-.primary-btn {
-    background: var(--color-primary);
-    color: white;
-    border: none;
-    padding: 0.5rem 1.2rem;
-    border-radius: var(--border-radius);
-    font-family: var(--font-display);
-    font-size: 0.8125rem;
-    font-weight: 600;
-    cursor: pointer;
-}
-
-.primary-btn:hover {
-    background: #e63d32;
-}
-
-.primary-btn:disabled {
-    background: var(--color-border-strong);
-    cursor: not-allowed;
-}
-
 .connect-tip {
     margin: var(--spacing-md) 0 0;
     font-size: 0.6875rem;
     color: var(--color-text-muted);
+
+    & code {
+        background: var(--color-bg-tertiary);
+        padding: 1px 4px;
+        border-radius: 3px;
+    }
 }
 
-.connect-tip code {
-    background: var(--color-bg-tertiary);
-    padding: 1px 4px;
-    border-radius: 3px;
-}
+/* end of styles for connect panel */
 
-/* ---- Inspector layout ------------------------------------------------- */
+/* styles for inspector layout */
 
 .inspector-view {
     flex: 1;
@@ -585,19 +687,19 @@ body:has(#theme-toggle:checked) .theme-toggle-btn::before {
     padding: var(--spacing-xs) var(--spacing-sm);
     background: var(--color-bg-primary);
     border-bottom: 1px solid var(--color-border);
+
+    & h2 {
+        margin: 0;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+    }
 }
 
 .pane-title {
     display: flex;
     flex-direction: column;
     gap: 0.1rem;
-}
-
-.pane-header h2 {
-    margin: 0;
-    font-size: 0.8125rem;
-    font-weight: 600;
-    letter-spacing: -0.01em;
 }
 
 /*
@@ -624,31 +726,6 @@ body:has(#theme-toggle:checked) .theme-toggle-btn::before {
     color: var(--color-text-muted);
 }
 
-/*
- * Always-visible destructive button in the pane header. Muted by default
- * (so it doesn't compete with the content); turns danger-red on its own
- * hover state to signal destructive intent before the click.
- */
-.pane-danger-btn {
-    transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
-    background: none;
-    border: 1px solid var(--color-border);
-    color: var(--color-text-muted);
-    cursor: pointer;
-    font-family: var(--font-display);
-    font-size: 0.625rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    padding: 2px 8px;
-    border-radius: var(--border-radius);
-}
-
-.pane-danger-btn:hover {
-    color: var(--color-danger);
-    border-color: var(--color-danger);
-    background: rgba(244, 67, 54, 0.08);
-}
-
 .pane-tabs {
     display: flex;
     gap: 0;
@@ -657,6 +734,7 @@ body:has(#theme-toggle:checked) .theme-toggle-btn::before {
     border-bottom: 1px solid var(--color-border);
     flex-shrink: 0;
 }
+
 .pane-tab {
     appearance: none;
     background: transparent;
@@ -669,27 +747,45 @@ body:has(#theme-toggle:checked) .theme-toggle-btn::before {
     border-bottom: 2px solid transparent;
     margin-bottom: -1px; /* overlap the parent's border so active tab merges */
     transition: color 120ms, border-color 120ms;
+
+    &:hover {
+        color: var(--color-text);
+    }
+
+    &.is-active {
+        /* Same accent as the role-user / role-assistant pills in the working
+         * pane - both flip together in dark mode via --color-role-accent. */
+        color: var(--color-role-accent);
+        border-bottom-color: var(--color-role-accent);
+        background: var(--color-role-accent-bg);
+        font-weight: 600;
+    }
+
+    &.is-disabled,
+    &[disabled] {
+        color: var(--color-text-muted);
+        cursor: not-allowed;
+        opacity: 0.55;
+    }
+
+    &.is-disabled:hover {
+        color: var(--color-text-muted);
+    }
 }
-.pane-tab:hover {
-    color: var(--color-text);
+
+.pane-toolbar {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    padding: 0.5rem var(--spacing-sm);
+    background: var(--color-bg-primary);
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
 }
-.pane-tab.is-active {
-    /* Same accent as the role-user / role-assistant pills in the working
-     * pane - both flip together in dark mode via --color-role-accent. */
-    color: var(--color-role-accent);
-    border-bottom-color: var(--color-role-accent);
-    background: var(--color-role-accent-bg);
-    font-weight: 600;
-}
-.pane-tab.is-disabled,
-.pane-tab[disabled] {
-    color: var(--color-text-muted);
-    cursor: not-allowed;
-    opacity: 0.55;
-}
-.pane-tab.is-disabled:hover {
-    color: var(--color-text-muted);
-}
+
+/* end of styles for inspector layout */
+
+/* styles for summary banner (LTM) */
 
 .summary-banner {
     padding: 0.55rem var(--spacing-sm);
@@ -698,7 +794,18 @@ body:has(#theme-toggle:checked) .theme-toggle-btn::before {
     flex-shrink: 0;
     font-size: 0.85rem;
     line-height: 1.45;
+
+    &.is-expanded .summary-banner-text {
+        -webkit-line-clamp: unset;
+        overflow: visible;
+    }
+
+    &.is-empty .summary-banner-text {
+        color: var(--color-text-muted);
+        font-style: italic;
+    }
 }
+
 .summary-banner-text {
     color: var(--color-text);
     white-space: pre-wrap;
@@ -709,14 +816,7 @@ body:has(#theme-toggle:checked) .theme-toggle-btn::before {
     -webkit-box-orient: vertical;
     overflow: hidden;
 }
-.summary-banner.is-expanded .summary-banner-text {
-    -webkit-line-clamp: unset;
-    overflow: visible;
-}
-.summary-banner.is-empty .summary-banner-text {
-    color: var(--color-text-muted);
-    font-style: italic;
-}
+
 .summary-banner-footer {
     /* One-row footer: "Show more" on the left, then meta and the ↻
      * refresh button on the right (meta pushed via margin-left: auto).
@@ -728,6 +828,7 @@ body:has(#theme-toggle:checked) .theme-toggle-btn::before {
     margin-top: 0.3rem;
     min-height: 1.2em; /* hold the line even when both children are empty */
 }
+
 .summary-banner-toggle {
     appearance: none;
     background: none;
@@ -737,16 +838,19 @@ body:has(#theme-toggle:checked) .theme-toggle-btn::before {
     font-family: inherit;
     color: var(--color-text-muted);
     cursor: pointer;
+
+    &:hover {
+        color: var(--color-text);
+    }
 }
-.summary-banner-toggle:hover {
-    color: var(--color-text);
-}
+
 .summary-banner-meta {
     margin-left: auto;
     font-size: 0.72rem;
     color: var(--color-text-muted);
     font-family: var(--font-mono);
 }
+
 .summary-banner-refresh {
     appearance: none;
     background: transparent;
@@ -759,32 +863,25 @@ body:has(#theme-toggle:checked) .theme-toggle-btn::before {
     cursor: pointer;
     flex-shrink: 0;
     transition: color 120ms, border-color 120ms, background 120ms;
-}
-.summary-banner-refresh:hover:not(:disabled) {
-    color: var(--color-text);
-    border-color: var(--color-text-muted);
-}
-.summary-banner-refresh:disabled {
-    cursor: wait;
-    opacity: 0.6;
-}
-.summary-banner-refresh.is-spinning {
-    animation: spin 0.9s linear infinite;
-}
-@keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+
+    &:hover:not(:disabled) {
+        color: var(--color-text);
+        border-color: var(--color-text-muted);
+    }
+
+    &:disabled {
+        cursor: wait;
+        opacity: 0.6;
+    }
+
+    &.is-spinning {
+        animation: spin 0.9s linear infinite;
+    }
 }
 
-.pane-toolbar {
-    display: flex;
-    flex-direction: column;
-    gap: 0.4rem;
-    padding: 0.5rem var(--spacing-sm);
-    background: var(--color-bg-primary);
-    border-bottom: 1px solid var(--color-border);
-    flex-shrink: 0;
-}
+/* end of styles for summary banner */
+
+/* styles for LTM search + chip filters */
 
 .search-row {
     display: flex;
@@ -802,13 +899,13 @@ body:has(#theme-toggle:checked) .theme-toggle-btn::before {
     font-family: var(--font-mono);
     font-size: 0.6875rem;
     color: var(--color-text);
-}
 
-.ltm-search:focus {
-    outline: none;
-    border-color: var(--color-primary);
-    background: var(--color-bg-primary);
-    box-shadow: 0 0 0 3px rgba(255, 68, 56, 0.12);
+    &:focus {
+        outline: none;
+        border-color: var(--color-primary);
+        background: var(--color-bg-primary);
+        box-shadow: 0 0 0 3px rgba(255, 68, 56, 0.12);
+    }
 }
 
 .optimize-toggle {
@@ -824,16 +921,126 @@ body:has(#theme-toggle:checked) .theme-toggle-btn::before {
     color: var(--color-text-secondary);
     cursor: pointer;
     user-select: none;
+
+    &:hover {
+        border-color: var(--color-border-strong);
+        color: var(--color-text);
+    }
+
+    & input {
+        margin: 0;
+        accent-color: var(--color-primary);
+    }
 }
 
-.optimize-toggle:hover {
-    border-color: var(--color-border-strong);
+.active-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+
+    &:empty {
+        display: none;
+    }
+}
+
+.filter-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 2px 4px 2px 7px;
+    background: var(--color-bg-tertiary);
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
     color: var(--color-text);
+
+    & .filter-pill-key {
+        color: var(--color-text-muted);
+    }
 }
 
-.optimize-toggle input {
+.filter-pill-remove {
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    padding: 0 4px;
+    border-radius: 50%;
+    font-size: 0.8125rem;
+    line-height: 1;
+
+    &:hover {
+        color: var(--color-danger);
+        background: rgba(244, 67, 54, 0.1);
+    }
+}
+
+/*
+ * Standalone "clear all" button after the per-filter remove pills. Uses
+ * the same color/hover treatment but pill-shaped instead of circular so
+ * the longer label reads cleanly.
+ */
+.filter-pill-clear-all {
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.625rem;
+    font-family: var(--font-mono);
+}
+
+/* end of styles for LTM search + chip filters */
+
+/* styles for card list */
+
+.card-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--spacing-xs) var(--spacing-sm);
     margin: 0;
-    accent-color: var(--color-primary);
+    list-style: none; /* reset <ul> default bullets */
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+
+    & > li {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+    }
+
+    &:empty::after {
+        content: "(empty)";
+        color: var(--color-text-muted);
+        font-style: italic;
+        text-align: center;
+        padding: var(--spacing-md);
+    }
+}
+
+/* end of styles for card list */
+
+/* styles for cards */
+
+.card {
+    background: var(--color-bg-primary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
+    padding: 0.6rem 0.7rem;
+    transition: box-shadow 200ms ease, border-color 200ms ease;
+
+    &.is-new {
+        animation: card-flash 800ms ease-out;
+    }
+}
+
+.card-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    color: var(--color-text-muted);
+    margin-bottom: 0.3rem;
 }
 
 /*
@@ -855,156 +1062,24 @@ body:has(#theme-toggle:checked) .theme-toggle-btn::before {
     cursor: help;
 }
 
-/*
- * Per-card delete button - appears on card hover, sits at the far right of
- * the meta row. Same hover-reveal pattern as the pane-danger-btn, just
- * scoped to the card.
- */
-.card-delete-btn {
-    opacity: 0;
-    transition: opacity 120ms ease, background 120ms ease, color 120ms ease;
-    background: none;
-    border: none;
-    color: var(--color-text-muted);
-    cursor: pointer;
-    font-size: 0.75rem;
-    line-height: 1;
-    padding: 1px 5px;
-    border-radius: 50%;
-    margin-left: 0.2rem;
-}
-
-.card:hover .card-delete-btn,
-.card-delete-btn:focus-visible {
-    opacity: 1;
-}
-
-.card-delete-btn:hover {
-    color: var(--color-danger);
-    background: rgba(244, 67, 54, 0.12);
-}
-
-.active-filters {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.3rem;
-}
-
-.active-filters:empty {
-    display: none;
-}
-
-.filter-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    padding: 2px 4px 2px 7px;
-    background: var(--color-bg-tertiary);
-    border: 1px solid var(--color-border);
-    border-radius: 12px;
-    font-family: var(--font-mono);
-    font-size: 0.625rem;
-    color: var(--color-text);
-}
-
-.filter-pill .filter-pill-key {
-    color: var(--color-text-muted);
-}
-
-.filter-pill-remove {
-    background: none;
-    border: none;
-    color: var(--color-text-muted);
-    cursor: pointer;
-    padding: 0 4px;
-    border-radius: 50%;
-    font-size: 0.8125rem;
-    line-height: 1;
-}
-
-.filter-pill-remove:hover {
-    color: var(--color-danger);
-    background: rgba(244, 67, 54, 0.1);
-}
-
-.card-list {
-    flex: 1;
-    overflow-y: auto;
-    padding: var(--spacing-xs) var(--spacing-sm);
-    margin: 0;
-    list-style: none; /* reset <ul> default bullets */
-    display: flex;
-    flex-direction: column;
-    gap: 0.7rem;
-}
-
-.card-list > li {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-}
-
-.card-list:empty::after {
-    content: "(empty)";
-    color: var(--color-text-muted);
-    font-style: italic;
-    text-align: center;
-    padding: var(--spacing-md);
-}
-
-/* ---- Cards ------------------------------------------------------------ */
-
-.card {
-    background: var(--color-bg-primary);
-    border: 1px solid var(--color-border);
-    border-radius: var(--border-radius);
-    padding: 0.6rem 0.7rem;
-    transition: box-shadow 200ms ease, border-color 200ms ease;
-}
-
-.card.is-new {
-    animation: card-flash 800ms ease-out;
-}
-
-@keyframes card-flash {
-    0% {
-        background: var(--color-accent);
-        border-color: var(--color-accent);
-    }
-    100% {
-        background: var(--color-bg-primary);
-        border-color: var(--color-border);
-    }
-}
-
-.card-meta {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    font-family: var(--font-mono);
-    font-size: 0.625rem;
-    color: var(--color-text-muted);
-    margin-bottom: 0.3rem;
-}
-
 .role-tag {
     text-transform: uppercase;
     font-weight: 700;
     letter-spacing: 0.04em;
     padding: 1px 5px;
     border-radius: 3px;
-}
 
-.role-tag.role-user,
-.role-tag.role-assistant {
-    background: var(--color-role-accent-bg);
-    color: var(--color-role-accent);
-}
+    &.role-user,
+    &.role-assistant {
+        background: var(--color-role-accent-bg);
+        color: var(--color-role-accent);
+    }
 
-.role-tag.role-system,
-.role-tag.role-tool {
-    background: var(--color-bg-tertiary);
-    color: var(--color-text-secondary);
+    &.role-system,
+    &.role-tool {
+        background: var(--color-bg-tertiary);
+        color: var(--color-text-secondary);
+    }
 }
 
 /*
@@ -1021,16 +1096,16 @@ body:has(#theme-toggle:checked) .theme-toggle-btn::before {
     align-items: center;
     gap: 0.2rem;
     margin-left: 0.5rem;
-}
 
-.card-meta-session code {
-    font-family: var(--font-mono);
-    font-style: normal;
-    font-size: 0.625rem;
-    background: var(--color-bg-tertiary);
-    padding: 1px 4px;
-    border-radius: 3px;
-    color: var(--color-text-secondary);
+    & code {
+        font-family: var(--font-mono);
+        font-style: normal;
+        font-size: 0.625rem;
+        background: var(--color-bg-tertiary);
+        padding: 1px 4px;
+        border-radius: 3px;
+        color: var(--color-text-secondary);
+    }
 }
 
 .card-text {
@@ -1072,24 +1147,37 @@ body:has(#theme-toggle:checked) .theme-toggle-btn::before {
     cursor: pointer;
     border: 1px solid transparent;
     transition: border-color 120ms ease, transform 80ms ease;
+
+    &:hover {
+        border-color: currentColor;
+    }
+
+    &:active {
+        transform: scale(0.96);
+    }
 }
 
-.chip:hover {
-    border-color: currentColor;
-}
-
-.chip:active {
-    transform: scale(0.96);
-}
-
+/* Hardcoded chip palettes (not driven by --color-*) get their own
+ * dark-mode overrides nested below. Tinted rgba backgrounds work on both
+ * surfaces; only the text/background pairs need to flip. */
 .chip-topic {
     background: #e8ebec; /* dusk grey */
     color: #163341; /* dusk */
+
+    body:has(#theme-toggle:checked) & {
+        background: var(--color-bg-tertiary);
+        color: var(--color-text);
+    }
 }
 
 .chip-entity {
     background: rgba(199, 150, 228, 0.18); /* lavender */
     color: #6a3aa0;
+
+    body:has(#theme-toggle:checked) & {
+        background: rgba(199, 150, 228, 0.22);
+        color: #d4b3f0;
+    }
 }
 
 .type-badge {
@@ -1101,94 +1189,67 @@ body:has(#theme-toggle:checked) .theme-toggle-btn::before {
     border-radius: 3px;
     background: var(--color-bg-tertiary);
     color: var(--color-text-secondary);
-}
 
-.type-badge.type-semantic {
-    background: rgba(255, 68, 56, 0.12);
-    color: var(--color-primary);
-}
+    &.type-semantic {
+        background: rgba(255, 68, 56, 0.12);
+        color: var(--color-primary);
+    }
 
-.type-badge.type-episodic {
-    background: var(--color-accent);
-    color: var(--color-dark);
-}
+    &.type-episodic {
+        background: var(--color-accent);
+        color: var(--color-dark);
+    }
 
-.type-badge.type-message {
-    background: rgba(45, 71, 84, 0.1);
-    color: var(--color-dark);
+    &.type-message {
+        background: rgba(45, 71, 84, 0.1);
+        color: var(--color-dark);
+
+        body:has(#theme-toggle:checked) & {
+            background: rgba(245, 247, 250, 0.08);
+            color: var(--color-text-secondary);
+        }
+    }
 }
 
 .extracted-flag {
     margin-left: auto;
     font-family: var(--font-mono);
     font-size: 0.625rem;
+
+    &.is-extracted {
+        color: var(--color-success);
+    }
+
+    &.is-pending {
+        color: var(--color-text-muted);
+    }
 }
 
-.extracted-flag.is-extracted {
-    color: var(--color-success);
-}
+/* end of styles for cards */
 
-.extracted-flag.is-pending {
-    color: var(--color-text-muted);
-}
-
-/*
- * Dark-mode overrides for chip / badge sites that hardcode colors instead
- * of using CSS variables. The tinted backgrounds (rgba) already work on
- * dark surfaces; the text colors need to lighten so they stay readable.
- */
-/* Role tags + active tab share --color-role-accent, which flips to the
- * brighter cyan in dark mode via the override at the top of this file -
- * no per-mode rules needed here anymore. */
-
-body:has(#theme-toggle:checked) .chip-topic {
-    background: var(--color-bg-tertiary);
-    color: var(--color-text);
-}
-
-body:has(#theme-toggle:checked) .chip-entity {
-    background: rgba(199, 150, 228, 0.22);
-    color: #d4b3f0;
-}
-
-body:has(#theme-toggle:checked) .type-badge.type-message {
-    background: rgba(245, 247, 250, 0.08);
-    color: var(--color-text-secondary);
-}
-
-/* ---- Summary ---------------------------------------------------------- */
+/* styles for working-memory summary block */
 
 .summary-block {
     flex-shrink: 0;
     padding: var(--spacing-xs) var(--spacing-sm);
     background: var(--color-bg-primary);
     border-top: 1px solid var(--color-border);
+
+    & h3 {
+        margin: 0 0 0.3rem;
+        font-size: 0.6875rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--color-text-secondary);
+    }
+
+    & p {
+        margin: 0;
+        font-size: 0.75rem;
+        color: var(--color-text);
+        font-style: italic;
+    }
 }
 
-.summary-block h3 {
-    margin: 0 0 0.3rem;
-    font-size: 0.6875rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--color-text-secondary);
-}
-
-.summary-block p {
-    margin: 0;
-    font-size: 0.75rem;
-    color: var(--color-text);
-    font-style: italic;
-}
-
-/* ---- Footer ----------------------------------------------------------- */
-
-.app-footer {
-    flex-shrink: 0;
-    padding: 4px var(--spacing-sm);
-    background: var(--color-bg-primary);
-    border-top: 1px solid var(--color-border);
-    font-family: var(--font-mono);
-    font-size: 0.625rem;
-    color: var(--color-text-muted);
-}
+/* end of styles for working-memory summary block */

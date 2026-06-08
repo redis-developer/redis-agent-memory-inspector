@@ -12,7 +12,7 @@
  *   DELETE /v1/long-term-memory?memory_ids=...
  *
  * Auth: optional. We don't send a Bearer token by default; if the server
- * has auth enabled the caller can pass `apiKey` in cfg and we'll attach it.
+ * has auth enabled the caller can pass `apiKey` in config and we'll attach it.
  *
  * Field naming: snake_case (`user_id`, `session_id`, `memory_type`,
  * `created_at`). The rest of the inspector code is written against this
@@ -21,21 +21,21 @@
 
 const PATHS = {
     health: "/v1/health",
-    workingMemory: (sid) => `/v1/working-memory/${encodeURIComponent(sid)}`,
+    workingMemory: (sessionId) => `/v1/working-memory/${encodeURIComponent(sessionId)}`,
     listSessions: "/v1/working-memory/",
     ltmSearch: "/v1/long-term-memory/search",
     ltmRoot: "/v1/long-term-memory",
     summaryViews: "/v1/summary-views",
-    summaryViewPartitions: (vid) =>
-        `/v1/summary-views/${encodeURIComponent(vid)}/partitions`,
-    summaryViewPartitionRun: (vid) =>
-        `/v1/summary-views/${encodeURIComponent(vid)}/partitions/run`,
+    summaryViewPartitions: (viewId) =>
+        `/v1/summary-views/${encodeURIComponent(viewId)}/partitions`,
+    summaryViewPartitionRun: (viewId) =>
+        `/v1/summary-views/${encodeURIComponent(viewId)}/partitions/run`,
 };
 
-export function createOssClient(cfg) {
-    const { url } = cfg;
-    const authHeaders = cfg.apiKey
-        ? { Authorization: `Bearer ${cfg.apiKey}` }
+export function createOssClient(config) {
+    const { url } = config;
+    const authHeaders = config.apiKey
+        ? { Authorization: `Bearer ${config.apiKey}` }
         : {};
 
     async function pingHealth() {

@@ -9,7 +9,7 @@
  * passes it into `searchLongTermMemory(...)`.
  */
 
-import { $, escape } from "../lib/dom.js";
+import { $, fromTemplate } from "../lib/dom.js";
 import { formatDateTime, relativeTime } from "../lib/format.js";
 
 /**
@@ -37,21 +37,21 @@ export function setSummary(partition) {
         return;
     }
     banner.hidden = false;
-    const textEl = $("ltm-summary-text");
-    const metaEl = $("ltm-summary-meta");
-    const toggleEl = $("ltm-summary-toggle");
+    const textElement = $("ltm-summary-text");
+    const metaElement = $("ltm-summary-meta");
+    const toggleElement = $("ltm-summary-toggle");
 
     if (!partition || !partition.summary) {
         banner.classList.add("is-empty");
-        textEl.textContent =
+        textElement.textContent =
             "No summary yet for this scope. Click ↻ to generate one.";
-        metaEl.textContent = "";
-        toggleEl.hidden = true;
+        metaElement.textContent = "";
+        toggleElement.hidden = true;
         return;
     }
 
     banner.classList.remove("is-empty");
-    textEl.textContent = partition.summary;
+    textElement.textContent = partition.summary;
     const meta = [];
     if (typeof partition.memory_count === "number") {
         meta.push(
@@ -63,7 +63,7 @@ export function setSummary(partition) {
     if (partition.computed_at) {
         meta.push(`computed ${relativeTime(partition.computed_at)}`);
     }
-    metaEl.textContent = meta.join(" · ");
+    metaElement.textContent = meta.join(" · ");
 
     // Defer overflow detection one frame so layout has settled with the
     // new text content before we measure.
@@ -79,19 +79,19 @@ export function setSummary(partition) {
  */
 function updateSummaryToggleVisibility() {
     const banner = $("ltm-summary-banner");
-    const textEl = $("ltm-summary-text");
-    const toggleEl = $("ltm-summary-toggle");
+    const textElement = $("ltm-summary-text");
+    const toggleElement = $("ltm-summary-toggle");
 
     const wasExpanded = banner.classList.contains("is-expanded");
     banner.classList.remove("is-expanded");
-    const collapsedHeight = textEl.clientHeight;
+    const collapsedHeight = textElement.clientHeight;
     banner.classList.add("is-expanded");
-    const expandedHeight = textEl.scrollHeight;
+    const expandedHeight = textElement.scrollHeight;
     if (!wasExpanded) banner.classList.remove("is-expanded");
 
     const overflows = expandedHeight > collapsedHeight + 2;
-    toggleEl.hidden = !overflows;
-    toggleEl.textContent = wasExpanded ? "Show less" : "Show more";
+    toggleElement.hidden = !overflows;
+    toggleElement.textContent = wasExpanded ? "Show less" : "Show more";
 }
 
 const seenIds = new Set();
@@ -105,7 +105,7 @@ let onDeleteCallback = null;
 
 // Cached context (userId + namespace) so the subtitle can re-derive itself
 // when the scope tab changes without the caller having to push context
-// again. `index.js` calls `setContext({ ... })` after every cfg mutation.
+// again. `index.js` calls `setContext({ ... })` after every config mutation.
 let context = { userId: null, namespace: null, hasSession: false };
 
 export function reset() {
@@ -154,9 +154,9 @@ export function init({ onChange, onDelete }) {
     // Show more / Show less for the clamped summary text.
     $("ltm-summary-toggle").addEventListener("click", () => {
         const banner = $("ltm-summary-banner");
-        const toggleEl = $("ltm-summary-toggle");
+        const toggleElement = $("ltm-summary-toggle");
         const nowExpanded = banner.classList.toggle("is-expanded");
-        toggleEl.textContent = nowExpanded ? "Show less" : "Show more";
+        toggleElement.textContent = nowExpanded ? "Show less" : "Show more";
     });
 
     // Tabs: pick a button by `data-scope`, mirror state into `scope`, update
@@ -190,7 +190,7 @@ export function init({ onChange, onDelete }) {
  *   2. Re-derive the subtitle text from the userId / namespace so it
  *      accurately describes what's actually being filtered.
  *
- * Called by index.js after every cfg mutation (initial connect + every
+ * Called by index.js after every config mutation (initial connect + every
  * picker-pill change).
  */
 export function setContext({ userId, namespace, hasSession }) {
@@ -282,142 +282,124 @@ export function render(memories) {
     const list = $("longterm-list");
     list.innerHTML = "";
     for (const memory of sorted) {
-        const isNew = memory.id && !seenIds.has(memory.id);
-        if (memory.id) seenIds.add(memory.id);
-
-        const card = document.createElement("article");
-        card.className = "card" + (isNew ? " is-new" : "");
-
-        const meta = document.createElement("div");
-        meta.className = "card-meta";
-
-        const type = document.createElement("span");
-        const memoryType = memory.memory_type ?? "semantic";
-        type.className = `type-badge type-${memoryType}`;
-        type.textContent = memoryType;
-        meta.appendChild(type);
-
-        if (memory.created_at) {
-            const when = document.createElement("time");
-            when.dateTime = memory.created_at;
-            when.textContent = formatDateTime(memory.created_at);
-            when.title = relativeTime(memory.created_at);
-            meta.appendChild(when);
-        }
-
-        // Source session - inline, right after the timestamp. Records the
-        // session this memory was extracted from. Some memories (seeded
-        // outside any conversation, or otherwise untagged) have no
-        // session_id, in which case we skip this entirely.
-        if (memory.session_id) {
-            const session = document.createElement("span");
-            session.className = "card-meta-session";
-            session.appendChild(document.createTextNode("from session: "));
-            const code = document.createElement("code");
-            code.textContent = memory.session_id;
-            session.appendChild(code);
-            meta.appendChild(session);
-        }
-
-        if (memory.id) {
-            const idEl = document.createElement("span");
-            idEl.className = "card-id";
-            // First 6 + ellipsis + last 6 - ULIDs encode the timestamp in the
-            // first ~10 chars and randomness in the last ~16, so trimming the
-            // middle gives you both the "when it was created" prefix and the
-            // "this one specifically" suffix at a glance. Full id still in title.
-            const fullId = String(memory.id);
-            idEl.textContent =
-                fullId.length > 13
-                    ? `${fullId.slice(0, 6)}…${fullId.slice(-6)}`
-                    : fullId;
-            idEl.title = `Memory ID: ${memory.id}`;
-            meta.appendChild(idEl);
-        }
-
-        // Score is only present when AMS ranked this result (text query was
-        // set). `score` is the composite (higher = better); `dist` is the raw
-        // vector distance; `score_type` reveals which scoring strategy AMS used.
-        if (typeof memory.score === "number") {
-            const score = document.createElement("span");
-            score.className = "score-badge";
-            score.textContent = memory.score.toFixed(3);
-            score.title =
-                `score: ${memory.score.toFixed(4)}\n` +
-                `dist:  ${memory.dist?.toFixed?.(4) ?? "-"}\n` +
-                `type:  ${memory.score_type ?? "-"}`;
-            meta.appendChild(score);
-        }
-
-        // Per-card delete - hover-revealed, confirms before firing. AMS
-        // supports DELETE /v1/long-term-memory?memory_ids=…; the caller
-        // handles the actual request via the onDelete callback.
-        if (memory.id) {
-            const del = document.createElement("button");
-            del.type = "button";
-            del.className = "card-delete-btn";
-            del.textContent = "✕";
-            del.title = "Delete this memory";
-            del.setAttribute("aria-label", "Delete memory");
-            del.addEventListener("click", (event) => {
-                event.stopPropagation();
-                const snippet = (memory.text ?? "").slice(0, 100);
-                const ok = confirm(
-                    `Delete this memory?\n\n"${snippet}${memory.text?.length > 100 ? "…" : ""}"`,
-                );
-                if (ok) onDeleteCallback?.(memory.id);
-            });
-            meta.appendChild(del);
-        }
-
-        card.appendChild(meta);
-
-        const text = document.createElement("p");
-        text.className = "card-text";
-        text.textContent = memory.text ?? "";
-        card.appendChild(text);
-
-        const topicsRow = renderChipRow("topics", memory.topics, "chip-topic");
-        if (topicsRow) card.appendChild(topicsRow);
-
-        const entitiesRow = renderChipRow("entities", memory.entities, "chip-entity");
-        if (entitiesRow) card.appendChild(entitiesRow);
-
-        const item = document.createElement("li");
-        item.appendChild(card);
-        list.appendChild(item);
+        list.appendChild(buildCard(memory));
     }
 
     renderActiveFilters();
 }
 
 /**
- * Labelled chip row - "topics: [chip1] [chip2] [chip3]". Returns `null` for
- * empty lists so the caller can skip appending instead of leaving a dangling
- * label. Labels mirror AMS's own field names so the UI matches the record shape.
+ * Clone the longterm-card template and fill its slots from a single
+ * memory record. The template's structure (meta row, type badge,
+ * timestamp, session, id, score, delete button, body text) is in
+ * index.html; this function only handles data binding + visibility +
+ * the delete handler that needs the memory.id closure.
  */
-function renderChipRow(label, values, chipClass) {
+function buildCard(memory) {
+    const node = fromTemplate("longterm-card-template");
+
+    const isNew = memory.id && !seenIds.has(memory.id);
+    if (memory.id) seenIds.add(memory.id);
+
+    const card = node.querySelector(".card");
+    if (isNew) card.classList.add("is-new");
+
+    const memoryType = memory.memory_type ?? "semantic";
+    const typeEl = node.querySelector(".type-badge");
+    typeEl.classList.add(`type-${memoryType}`);
+    typeEl.textContent = memoryType;
+
+    if (memory.created_at) {
+        const when = node.querySelector("time");
+        when.hidden = false;
+        when.dateTime = memory.created_at;
+        when.textContent = formatDateTime(memory.created_at);
+        when.title = relativeTime(memory.created_at);
+    }
+
+    // Source session - records the session this memory was extracted
+    // from. Some memories (seeded outside any conversation, or otherwise
+    // untagged) have no session_id, in which case the slot stays hidden.
+    if (memory.session_id) {
+        const session = node.querySelector(".card-meta-session");
+        session.hidden = false;
+        session.querySelector("code").textContent = memory.session_id;
+    }
+
+    if (memory.id) {
+        const idElement = node.querySelector(".card-id");
+        idElement.hidden = false;
+        // First 6 + ellipsis + last 6 - ULIDs encode the timestamp in the
+        // first ~10 chars and randomness in the last ~16, so trimming the
+        // middle gives you both the "when it was created" prefix and the
+        // "this one specifically" suffix at a glance. Full id still in title.
+        const fullId = String(memory.id);
+        idElement.textContent =
+            fullId.length > 13
+                ? `${fullId.slice(0, 6)}…${fullId.slice(-6)}`
+                : fullId;
+        idElement.title = `Memory ID: ${memory.id}`;
+    }
+
+    // Score is only present when AMS ranked this result (text query was
+    // set). `score` is the composite (higher = better); `dist` is the raw
+    // vector distance; `score_type` reveals which scoring strategy AMS used.
+    if (typeof memory.score === "number") {
+        const score = node.querySelector(".score-badge");
+        score.hidden = false;
+        score.textContent = memory.score.toFixed(3);
+        score.title =
+            `score: ${memory.score.toFixed(4)}\n` +
+            `dist:  ${memory.dist?.toFixed?.(4) ?? "-"}\n` +
+            `type:  ${memory.score_type ?? "-"}`;
+    }
+
+    // Per-card delete - hover-revealed, confirms before firing. AMS
+    // supports DELETE /v1/long-term-memory?memory_ids=…; the caller
+    // handles the actual request via the onDelete callback.
+    if (memory.id) {
+        const del = node.querySelector(".card-delete-button");
+        del.hidden = false;
+        del.addEventListener("click", (event) => {
+            event.stopPropagation();
+            const snippet = (memory.text ?? "").slice(0, 100);
+            const ok = confirm(
+                `Delete this memory?\n\n"${snippet}${memory.text?.length > 100 ? "…" : ""}"`,
+            );
+            if (ok) onDeleteCallback?.(memory.id);
+        });
+    }
+
+    node.querySelector(".card-text").textContent = memory.text ?? "";
+
+    const article = node.querySelector(".card");
+    const topicsRow = buildChipRow("topics", memory.topics, "chip-topic");
+    if (topicsRow) article.appendChild(topicsRow);
+    const entitiesRow = buildChipRow("entities", memory.entities, "chip-entity");
+    if (entitiesRow) article.appendChild(entitiesRow);
+
+    return node;
+}
+
+/**
+ * Labelled chip row - "topics: [chip1] [chip2] [chip3]". Returns `null`
+ * for empty lists so the caller can skip appending instead of leaving a
+ * dangling label. Labels mirror AMS's own field names so the UI matches
+ * the record shape.
+ */
+function buildChipRow(label, values, chipClass) {
     if (!values || values.length === 0) return null;
-    const row = document.createElement("div");
-    row.className = "chip-row";
-
-    const labelEl = document.createElement("span");
-    labelEl.className = "chip-row-label";
-    labelEl.textContent = label;
-    row.appendChild(labelEl);
-
-    const chipsWrap = document.createElement("div");
-    chipsWrap.className = "chip-row-chips";
+    const row = fromTemplate("chip-row-template");
+    row.querySelector(".chip-row-label").textContent = label;
+    const chipsWrapper = row.querySelector(".chip-row-chips");
     for (const value of values) {
-        const chip = document.createElement("button");
-        chip.type = "button";
-        chip.className = `chip ${chipClass}`;
+        const chip = fromTemplate("chip-template");
+        chip.classList.add(chipClass);
         chip.textContent = value;
         chip.title = `Click to filter by ${label.slice(0, -1)}: ${value}`;
         chip.addEventListener("click", () => toggleFilter(label, value));
-        chipsWrap.appendChild(chip);
+        chipsWrapper.appendChild(chip);
     }
-    row.appendChild(chipsWrap);
     return row;
 }
 
@@ -430,18 +412,13 @@ function renderActiveFilters() {
     container.innerHTML = "";
 
     const append = (key, value, onRemove) => {
-        const pill = document.createElement("span");
-        pill.className = "filter-pill";
-        pill.innerHTML =
-            `<span class="filter-pill-key">${escape(key)}</span>` +
-            `<span>${escape(value)}</span>`;
-        const x = document.createElement("button");
-        x.type = "button";
-        x.className = "filter-pill-remove";
-        x.textContent = "×";
-        x.title = "Remove this filter";
-        x.addEventListener("click", onRemove);
-        pill.appendChild(x);
+        const pill = fromTemplate("filter-pill-template");
+        pill.querySelector(".filter-pill-key").textContent = key;
+        pill.querySelector(".filter-pill-value").textContent = value;
+        pill.querySelector(".filter-pill-remove").addEventListener(
+            "click",
+            onRemove,
+        );
         container.appendChild(pill);
     };
 
@@ -453,12 +430,13 @@ function renderActiveFilters() {
     }
 
     if (filter.topics.length || filter.entities.length) {
+        // "Clear all" button - same chrome as the per-filter pills'
+        // remove button, but standalone (no surrounding pill). Reuse the
+        // filter-pill-remove class so it picks up the same hover styling.
         const clear = document.createElement("button");
         clear.type = "button";
-        clear.className = "filter-pill-remove";
+        clear.className = "filter-pill-remove filter-pill-clear-all";
         clear.textContent = "clear all";
-        clear.style.padding = "2px 8px";
-        clear.style.borderRadius = "12px";
         clear.title = "Remove all filters";
         clear.addEventListener("click", clearAllFilters);
         container.appendChild(clear);

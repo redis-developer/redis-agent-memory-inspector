@@ -39,16 +39,16 @@
 import { createOssClient } from "./ams/oss.js";
 import { createCloudClient } from "./ams/cloud.js";
 
-export function createAmsClient(cfg) {
-    if (!cfg?.url) {
-        throw new Error("createAmsClient: cfg.url is required");
+export function createAmsClient(config) {
+    if (!config?.url) {
+        throw new Error("createAmsClient: config.url is required");
     }
-    const backend = cfg.backend ?? "oss";
+    const backend = config.backend ?? "oss";
     switch (backend) {
         case "oss":
-            return createOssClient(cfg);
+            return createOssClient(config);
         case "cloud":
-            return createCloudClient(cfg);
+            return createCloudClient(config);
         default:
             throw new Error(`createAmsClient: unknown backend "${backend}"`);
     }

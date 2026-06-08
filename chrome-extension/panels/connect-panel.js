@@ -8,9 +8,9 @@
  * surface those - they're a "which slice of the data am I looking at" choice,
  * not a "how do I reach the server" choice.
  *
- * The panel doesn't own the cfg - it gathers values and hands them to the
- * caller via `onConnect(cfg)` once the user clicks Connect. The caller
- * (index.js) decides what to do with that cfg.
+ * The panel doesn't own the config - it gathers values and hands them to the
+ * caller via `onConnect(config)` once the user clicks Connect. The caller
+ * (index.js) decides what to do with that config.
  */
 
 import { $ } from "../lib/dom.js";
@@ -19,7 +19,7 @@ import { createAmsClient } from "../lib/ams-client.js";
 /** Selected backend from the radio group ("oss" or "cloud"). */
 function selectedBackend() {
     const checked = document.querySelector(
-        'input[name="cfg-backend"]:checked',
+        'input[name="config-backend"]:checked',
     );
     return checked?.value ?? "oss";
 }
@@ -34,17 +34,17 @@ function selectedBackend() {
  * probe doesn't fire half-configured requests.
  */
 function probeClient() {
-    const url = $("cfg-url").value.trim().replace(/\/+$/, "");
+    const url = $("config-url").value.trim().replace(/\/+$/, "");
     if (!url) return null;
     const backend = selectedBackend();
     if (backend === "cloud") {
-        const apiKey = $("cfg-api-key").value.trim();
-        const storeId = $("cfg-store-id").value.trim();
+        const apiKey = $("config-api-key").value.trim();
+        const storeId = $("config-store-id").value.trim();
         if (!apiKey || !storeId) return null;
         // Empty proxyUrl means "use the built-in default" - let the client
         // decide. Trim trailing slashes to keep URL building consistent.
         const proxyUrl =
-            $("cfg-proxy-url").value.trim().replace(/\/+$/, "") || null;
+            $("config-proxy-url").value.trim().replace(/\/+$/, "") || null;
         return createAmsClient({
             backend,
             url,
@@ -66,7 +66,7 @@ function setStatus(s) {
 
 /**
  * Show the panel and wire its inputs. `seed` pre-fills fields (e.g. on
- * Reconfigure, we pass the current cfg so the user doesn't have to re-type).
+ * Reconfigure, we pass the current config so the user doesn't have to re-type).
  */
 export function show({ seed = {}, onConnect }) {
     onConnectCallback = onConnect;
@@ -74,10 +74,10 @@ export function show({ seed = {}, onConnect }) {
     $("connect-panel").hidden = false;
     $("inspector-view").hidden = true;
     $("connection-pills").hidden = true;
-    $("reconfigure-btn").hidden = true;
-    $("refresh-btn").hidden = true;
+    $("reconfigure-button").hidden = true;
+    $("refresh-button").hidden = true;
 
-    const urlInput = $("cfg-url");
+    const urlInput = $("config-url");
     if (seed.url) urlInput.value = seed.url;
     urlInput.addEventListener("input", onUrlInput);
 
@@ -85,19 +85,19 @@ export function show({ seed = {}, onConnect }) {
     // backend radio according to the seed (defaults to "oss").
     if (seed.backend === "cloud") {
         document.querySelector(
-            'input[name="cfg-backend"][value="cloud"]',
+            'input[name="config-backend"][value="cloud"]',
         ).checked = true;
     }
-    if (seed.apiKey) $("cfg-api-key").value = seed.apiKey;
-    if (seed.storeId) $("cfg-store-id").value = seed.storeId;
-    if (seed.proxyUrl) $("cfg-proxy-url").value = seed.proxyUrl;
+    if (seed.apiKey) $("config-api-key").value = seed.apiKey;
+    if (seed.storeId) $("config-store-id").value = seed.storeId;
+    if (seed.proxyUrl) $("config-proxy-url").value = seed.proxyUrl;
     applyBackendVisibility();
 
     // Switching backend changes which fields are required + may need a
     // re-probe of the new URL/credentials. Also wipe the health badge so a
     // stale ✓ live doesn't carry over from the previous backend.
     for (const radio of document.querySelectorAll(
-        'input[name="cfg-backend"]',
+        'input[name="config-backend"]',
     )) {
         radio.addEventListener("change", () => {
             applyBackendVisibility();
@@ -112,27 +112,27 @@ export function show({ seed = {}, onConnect }) {
     // path) - these are required before any probe is meaningful. The proxy
     // URL also triggers a re-probe because changing it changes where the
     // request actually goes.
-    $("cfg-api-key").addEventListener("input", onUrlInput);
-    $("cfg-store-id").addEventListener("input", onUrlInput);
-    $("cfg-proxy-url").addEventListener("input", onUrlInput);
+    $("config-api-key").addEventListener("input", onUrlInput);
+    $("config-store-id").addEventListener("input", onUrlInput);
+    $("config-proxy-url").addEventListener("input", onUrlInput);
 
     // Select-all on focus for the URL input. Without this, clicking into a
     // pre-filled field lands the cursor at the end and typing appends.
-    $("cfg-url").addEventListener("focus", (e) => e.target.select());
+    $("config-url").addEventListener("focus", (e) => e.target.select());
 
-    // Pre-fill refresh-interval inputs from seed cfg if it has them. The cfg
+    // Pre-fill refresh-interval inputs from seed config if it has them. The config
     // stores intervals in milliseconds; the inputs work in seconds because
     // that's the unit users think in.
     if (typeof seed.workingMemoryRefreshMs === "number") {
-        $("cfg-working-refresh").value = Math.round(seed.workingMemoryRefreshMs / 1000);
+        $("config-working-refresh").value = Math.round(seed.workingMemoryRefreshMs / 1000);
     }
     if (typeof seed.longTermMemoryRefreshMs === "number") {
-        $("cfg-longterm-refresh").value = Math.round(seed.longTermMemoryRefreshMs / 1000);
+        $("config-longterm-refresh").value = Math.round(seed.longTermMemoryRefreshMs / 1000);
     }
 
-    $("connect-btn").addEventListener("click", () => {
-        const cfg = readFormCfg();
-        onConnectCallback?.(cfg);
+    $("connect-button").addEventListener("click", () => {
+        const config = readFormConfig();
+        onConnectCallback?.(config);
     });
 
     // Kick off discovery immediately so the namespace dropdown populates from
@@ -140,18 +140,18 @@ export function show({ seed = {}, onConnect }) {
     runDiscovery(seed);
 }
 
-function readFormCfg() {
+function readFormConfig() {
     // Convert seconds → milliseconds. The inputs are typed in seconds (more
     // natural for the user); the rest of the app works in ms (matches
     // setInterval / setTimeout). Clamped to a sane minimum so a stray 0 or
     // negative value doesn't melt the browser.
-    const workingSec = Math.max(1, parseInt($("cfg-working-refresh").value, 10) || 3);
-    const longTermSec = Math.max(1, parseInt($("cfg-longterm-refresh").value, 10) || 5);
+    const workingSeconds = Math.max(1, parseInt($("config-working-refresh").value, 10) || 3);
+    const longTermSeconds = Math.max(1, parseInt($("config-longterm-refresh").value, 10) || 5);
 
     const backend = selectedBackend();
-    const cfg = {
+    const config = {
         backend,
-        url: $("cfg-url").value.trim().replace(/\/+$/, ""),
+        url: $("config-url").value.trim().replace(/\/+$/, ""),
         // userId + sessionId are picked in the inspector view (header
         // pills), not here. Left null until the auto-pick runs.
         userId: null,
@@ -159,26 +159,26 @@ function readFormCfg() {
         // Namespace is picked in the inspector view (header pill), not here.
         // Left null until autoPickFilters runs.
         namespace: null,
-        workingMemoryRefreshMs: workingSec * 1000,
-        longTermMemoryRefreshMs: longTermSec * 1000,
+        workingMemoryRefreshMs: workingSeconds * 1000,
+        longTermMemoryRefreshMs: longTermSeconds * 1000,
     };
     if (backend === "cloud") {
-        cfg.apiKey = $("cfg-api-key").value.trim();
-        cfg.storeId = $("cfg-store-id").value.trim();
+        config.apiKey = $("config-api-key").value.trim();
+        config.storeId = $("config-store-id").value.trim();
         // Empty string → null so the cloud client falls back to its
         // built-in default proxy URL.
-        cfg.proxyUrl =
-            $("cfg-proxy-url").value.trim().replace(/\/+$/, "") || null;
+        config.proxyUrl =
+            $("config-proxy-url").value.trim().replace(/\/+$/, "") || null;
     }
-    return cfg;
+    return config;
 }
 
-function isCompleteCfg(cfg) {
+function isCompleteConfig(config) {
     // Only the connection bits matter here. user_id + session_id are
     // resolved after connect via the picker pills.
-    if (!cfg?.url) return false;
-    if (cfg.backend === "cloud") {
-        if (!cfg.apiKey || !cfg.storeId) return false;
+    if (!config?.url) return false;
+    if (config.backend === "cloud") {
+        if (!config.apiKey || !config.storeId) return false;
     }
     return true;
 }
@@ -196,7 +196,7 @@ function applyBackendVisibility() {
 }
 
 function updateConnectButton() {
-    $("connect-btn").disabled = !isCompleteCfg(readFormCfg());
+    $("connect-button").disabled = !isCompleteConfig(readFormConfig());
 }
 
 function onUrlInput() {
@@ -214,7 +214,7 @@ async function runDiscovery(_seed = null) {
     const probe = probeClient();
     if (!probe) return;
 
-    const url = $("cfg-url").value.trim().replace(/\/+$/, "");
+    const url = $("config-url").value.trim().replace(/\/+$/, "");
     setStatus(`Probing ${url}…`);
     const badge = $("url-health");
     const health = await probe.pingHealth();
