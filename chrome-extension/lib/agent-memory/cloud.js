@@ -177,7 +177,7 @@ export function createCloudClient(config) {
             // OR a plain-text response from a CDN/WAF in front of it.
             const raw = await res.text();
             console.warn(
-                `[AMS cloud] pingHealth got ${res.status}; body:`,
+                `[Redis Agent Memory Cloud] pingHealth got ${res.status}; body:`,
                 raw,
             );
             let detail = res.statusText;
@@ -190,7 +190,7 @@ export function createCloudClient(config) {
             }
             return { ok: false, status: res.status, detail };
         } catch (err) {
-            console.warn("[AMS cloud] pingHealth threw:", err);
+            console.warn("[Redis Agent Memory Cloud] pingHealth threw:", err);
             return { ok: false, status: 0, detail: err.message };
         }
     }
@@ -220,9 +220,9 @@ export function createCloudClient(config) {
         const cloudFilter = {};
         if (userId) cloudFilter.ownerId = { eq: userId };
         if (filter.sessionId) cloudFilter.sessionId = { eq: filter.sessionId };
-        if (filter.topics?.length) cloudFilter.topics = { any: filter.topics };
+        if (filter.topics?.length) cloudFilter.topics = { in: filter.topics };
         if (filter.entities?.length)
-            cloudFilter.entities = { any: filter.entities };
+            cloudFilter.entities = { in: filter.entities };
 
         // Cloud rejects requests with neither `text` nor `filter`. We use a
         // single-space `text` as a benign "match anything" sentinel when the
@@ -238,7 +238,7 @@ export function createCloudClient(config) {
             // AND across filter keys so scoping (ownerId, sessionId) and
             // narrowing (topics, entities) compose. OSS does this implicitly;
             // Cloud needs `filterOp: "all"` explicitly. Within each
-            // `{any: [...]}` list the values stay OR'd.
+            // `{in: [...]}` list the values stay OR'd.
             body.filterOp = "all";
         }
         // Namespace doesn't exist on cloud - silently ignore.
@@ -287,35 +287,31 @@ export function createCloudClient(config) {
         return { status: "ok", deleted: data?.deleted ?? [] };
     }
 
-    // Summary views are an OSS-server feature; the Cloud / Iris API surface
-    // doesn't expose them today. Stubbed so the inspector can call these
-    // uniformly without backend-specific branching - they just return
-    // "nothing here" and the UI gracefully skips the banners.
-    async function listSummaryViews() {
-        return [];
-    }
-    async function createSummaryView() {
-        throw new Error("summary views not supported on cloud backend");
-    }
-    async function listSummaryViewPartitions() {
-        return [];
-    }
-    async function runSummaryViewPartition() {
-        throw new Error("summary views not supported on cloud backend");
-    }
+    // Summary views aren't supported on Cloud. The `summaryViews` namespace
+    // is simply absent from the returned client - callers do
+    // `if (client.summaryViews)` to gate UI / behavior.
 
     return {
         backend: "cloud",
-        pingHealth,
-        listSessions,
-        getWorkingMemory,
-        searchLongTermMemory,
-        discoverFilters,
-        deleteWorkingMemory,
-        deleteLongTermMemory,
-        listSummaryViews,
-        createSummaryView,
-        listSummaryViewPartitions,
-        runSummaryViewPartition,
+
+        // Cross-cutting capability flags
+        supportsNamespaces: false,
+        supportsUserIdServerFilter: false,
+
+        // Required domains
+        health: Object.freeze({ ping: pingHealth }),
+        sessions: Object.freeze({ list: listSessions }),
+        workingMemory: Object.freeze({
+            get: getWorkingMemory,
+            delete: deleteWorkingMemory,
+        }),
+        longTermMemory: Object.freeze({
+            search: searchLongTermMemory,
+            delete: deleteLongTermMemory,
+            supportsOptimizeQuery: false,
+        }),
+        discovery: Object.freeze({ filters: discoverFilters }),
+
+        // summaryViews intentionally absent → falsy → graceful
     };
 }

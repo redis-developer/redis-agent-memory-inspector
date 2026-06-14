@@ -13,7 +13,7 @@
  */
 
 import { $, fromTemplate } from "./lib/dom.js";
-import { createAmsClient } from "./lib/ams-client.js";
+import { createAgentMemoryClient } from "./lib/agent-memory-client.js";
 import { createPoller } from "./lib/polling.js";
 import { timeStr } from "./lib/format.js";
 import { ensureSummaryViews } from "./lib/summary-views.js";
@@ -28,13 +28,13 @@ const LONG_TERM_MEMORY_REFRESH_MS = 5000;
 
 let config = null;
 let poller = null;
-let client = null; // backend-specific AMS client, created on connect
+let client = null; // backend-specific Redis Agent Memory client, created on connect
 let summaryViewIds = null; // { userProfileViewId, sessionProfileViewId } | null
 
 document.addEventListener("DOMContentLoaded", async () => {
     // Long-term panel owns its filter state and per-card delete affordance.
     // We subscribe so a filter change triggers a refetch, and we provide a
-    // delete handler that calls AMS then refetches.
+    // delete handler that calls Redis Agent Memory then refetches.
     longTermPanel.init({
         onChange: pollLongTerm,
         onDelete: handleLongTermDelete,
@@ -53,25 +53,21 @@ document.addEventListener("DOMContentLoaded", async () => {
     // because the operation is destructive (no soft delete, no undo).
     $("working-clear-button").addEventListener("click", handleWorkingClear);
 
-    // Summary-view refresh: forces AMS to re-run the LLM for the active
+    // Summary-view refresh: forces Redis Agent Memory to re-run the LLM for the active
     // scope's partition. Disabled while in flight to prevent concurrent
     // runs; the spinning class on the icon signals progress.
     $("ltm-summary-refresh").addEventListener("click", handleSummaryRefresh);
 
-    // Click-outside closes any open picker-pill popover. Mounted once so
-    // each pill doesn't have to manage its own document listener.
-    document.addEventListener("click", (e) => {
-        for (const open of document.querySelectorAll(".pill-picker.is-open")) {
-            if (!open.contains(e.target)) closePicker(open);
-        }
-    });
 });
 
 async function connect(newConfig) {
     config = newConfig;
-    client = createAmsClient(config);
+    client = createAgentMemoryClient(config);
     workingPanel.reset();
     longTermPanel.reset();
+    longTermPanel.setCapabilities({
+        optimizeQuery: client.longTermMemory.supportsOptimizeQuery,
+    });
 
     $("connect-panel").hidden = true;
     $("inspector-view").hidden = false;
@@ -109,18 +105,18 @@ async function connect(newConfig) {
  * Run discovery on the now-live client to seed config.namespace + config.userId +
  * config.sessionId with the most recently active values. discoverFilters()
  * preserves LTM-scan order, so users[0] / namespaces[0] = most recent.
- * listSessions() returns AMS-ordered sessions; we take the first.
+ * listSessions() returns ordered sessions; we take the first.
  */
 async function autoPickFilters() {
     try {
-        const { users, namespaces } = await client.discoverFilters();
+        const { users, namespaces } = await client.discovery.filters();
         if (namespaces.length > 0) config.namespace = namespaces[0];
         if (users.length > 0) config.userId = users[0];
     } catch (err) {
         setStatus(`couldn't discover filters: ${err.message}`);
     }
     try {
-        const sessions = await client.listSessions(config.userId, config.namespace);
+        const sessions = await client.sessions.list(config.userId, config.namespace);
         if (sessions.length > 0) config.sessionId = sessions[0];
     } catch (err) {
         setStatus(`couldn't list sessions: ${err.message}`);
@@ -132,15 +128,15 @@ function renderConnectionPills() {
     pills.innerHTML = "";
     pills.appendChild(staticPill("url", new URL(config.url).host));
 
-    // Namespace pill - OSS only (Cloud has no namespace concept).
-    if (config.backend !== "cloud") {
+    // Namespace pill - only on backends that support namespaces.
+    if (client.supportsNamespaces) {
         pills.appendChild(
             pickerPill({
                 key: "ns",
                 value: config.namespace,
                 allowNone: true,
                 getOptions: async () => {
-                    const { namespaces } = await client.discoverFilters();
+                    const { namespaces } = await client.discovery.filters();
                     return namespaces;
                 },
                 onPick: (value) => applyFilterChange({ namespace: value }),
@@ -154,7 +150,7 @@ function renderConnectionPills() {
             value: config.userId,
             allowNone: true,
             getOptions: async () => {
-                const { users } = await client.discoverFilters();
+                const { users } = await client.discovery.filters();
                 return users;
             },
             onPick: (value) => applyFilterChange({ userId: value }),
@@ -165,7 +161,7 @@ function renderConnectionPills() {
             key: "session",
             value: config.sessionId,
             allowNone: true,
-            getOptions: () => client.listSessions(config.userId, config.namespace),
+            getOptions: () => client.sessions.list(config.userId, config.namespace),
             onPick: (value) => applyFilterChange({ sessionId: value }),
         }),
     );
@@ -191,7 +187,7 @@ async function applyFilterChange({ namespace, userId, sessionId }) {
 
     if (changedScopeKey) {
         try {
-            const sessions = await client.listSessions(
+            const sessions = await client.sessions.list(
                 config.userId,
                 config.namespace,
             );
@@ -223,119 +219,80 @@ function staticPill(key, value) {
 }
 
 /**
- * Sentinel value rendered in the datalist when `allowNone` is true.
- * Selecting this option (or clearing the input) commits a null pick.
+ * Label shown in the picker dropdown when `allowNone` is true and the
+ * user wants to clear the filter. Selecting it (or emptying the input)
+ * commits a null pick.
  */
-const NONE_SENTINEL = "(none)";
+const NO_FILTER_LABEL = "(none)";
 
 /**
- * Clickable pill that opens a popover combobox below itself. Structure
- * (trigger button + popover with search input, datalist, Apply) is
- * defined in #picker-pill-template in index.html; this function clones it,
- * fills the slots, and wires the interaction handlers.
+ * Pill-styled native <select> for picking from a discovered list (users,
+ * sessions, namespaces). Structure is defined in #picker-pill-template;
+ * this function clones it, fetches the current option list, and wires
+ * `change` to call onPick. Native <select> gives us keyboard nav,
+ * screen-reader support, type-ahead, and click-outside handling for free.
  *
- * If `allowNone` is true, the popover surfaces a "(none)" entry at the top
- * of the suggestion list and treats either picking it or clearing the
- * input as `onPick(null)` - useful for filters that are optional in AMS
- * (user_id, namespace, session_id can all be unset to broaden the scope).
+ * If `allowNone` is true, the dropdown surfaces a "(none)" entry mapped
+ * to `onPick(null)` - useful for Redis Agent Memory filters that can be unset to broaden
+ * the scope (user_id, namespace, session_id).
  *
- * Click-outside (handled at the document level in DOMContentLoaded) closes
- * the popover without firing.
+ * Options are fetched once when the pill mounts. Pills are re-mounted on
+ * every connect/filter change in `renderConnectionPills()`, so the list
+ * stays fresh without separate cache invalidation.
  */
 function pickerPill({ key, value, getOptions, onPick, allowNone = false }) {
     const wrapper = fromTemplate("picker-pill-template");
-
     wrapper.querySelector(".pill-key").textContent = key;
-    wrapper.querySelector(".pill-value").textContent = value ?? NONE_SENTINEL;
+    const select = wrapper.querySelector(".pill-select");
 
-    const popover = wrapper.querySelector(".pill-popover");
-    const input = wrapper.querySelector(".pill-search");
-    const datalist = wrapper.querySelector("datalist");
-    const apply = wrapper.querySelector(".pill-popover-apply");
-    const trigger = wrapper.querySelector(".pill-button");
+    // Show the current value immediately so the pill renders something
+    // while options load. The placeholder option is replaced once the
+    // real list arrives.
+    const placeholder = document.createElement("option");
+    placeholder.value = value ?? "";
+    placeholder.textContent = value ?? NO_FILTER_LABEL;
+    placeholder.selected = true;
+    select.appendChild(placeholder);
 
-    // Each cloned picker needs its own datalist id so <input list="...">
-    // points at the right list (otherwise all pickers would share suggestions).
-    const datalistId = `pill-options-${key}-${Math.random().toString(36).slice(2, 8)}`;
-    datalist.id = datalistId;
-    input.setAttribute("list", datalistId);
-    input.placeholder = `Pick or type a ${key}…`;
+    select.addEventListener("change", () => {
+        const pick = allowNone && select.value === "" ? null : select.value;
+        if (pick === value) return;
+        onPick(pick);
+    });
 
-    trigger.addEventListener("click", async (e) => {
-        e.stopPropagation(); // don't trip the document click-outside handler
-        if (wrapper.classList.contains("is-open")) {
-            closePicker(wrapper);
-            return;
-        }
-        // Close any other open pickers first.
-        for (const other of document.querySelectorAll(".pill-picker.is-open")) {
-            if (other !== wrapper) closePicker(other);
-        }
-        wrapper.classList.add("is-open");
-        popover.hidden = false;
-        input.value = value ?? "";
-        // Populate the datalist lazily so we always see fresh options when
-        // the user re-opens the picker. "(none)" goes first so it's the
-        // most reachable choice when collapsing back to a broader scope.
-        datalist.innerHTML = "";
-        if (allowNone) {
-            const noneOption = document.createElement("option");
-            noneOption.value = NONE_SENTINEL;
-            datalist.appendChild(noneOption);
-        }
+    // Populate the real options. Done async so an `await getOptions()`
+    // that talks to Redis Agent Memory doesn't block the rest of the pill row from
+    // rendering.
+    (async () => {
         try {
             const options = await getOptions();
+            select.innerHTML = "";
+            if (allowNone) {
+                select.appendChild(makeOption("", NO_FILTER_LABEL, value === null));
+            }
             for (const v of options) {
-                const opt = document.createElement("option");
-                opt.value = v;
-                datalist.appendChild(opt);
+                select.appendChild(makeOption(v, v, v === value));
             }
         } catch (err) {
             setStatus(`couldn't load ${key} options: ${err.message}`);
         }
-        input.focus();
-        input.select();
-    });
-
-    function commit() {
-        const raw = input.value.trim();
-        closePicker(wrapper);
-        // Empty input or the explicit "(none)" sentinel both mean "clear
-        // this filter" when the pill allows none; otherwise an empty input
-        // is just a no-op (you can't unset a required field).
-        if (allowNone && (raw === "" || raw === NONE_SENTINEL)) {
-            if (value !== null) onPick(null);
-            return;
-        }
-        if (raw && raw !== value) onPick(raw);
-    }
-
-    apply.addEventListener("click", commit);
-    input.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-            e.preventDefault();
-            commit();
-        } else if (e.key === "Escape") {
-            closePicker(wrapper);
-        }
-    });
-    // Picking from the datalist fires `change` (not just `input`) - commit
-    // straight away so the user doesn't have to click Apply.
-    input.addEventListener("change", commit);
+    })();
 
     return wrapper;
 }
 
-function closePicker(wrapper) {
-    wrapper.classList.remove("is-open");
-    const popover = wrapper.querySelector(".pill-popover");
-    if (popover) popover.hidden = true;
+function makeOption(value, label, selected) {
+    const opt = document.createElement("option");
+    opt.value = value;
+    opt.textContent = label;
+    if (selected) opt.selected = true;
+    return opt;
 }
 
 async function pollWorking() {
     if (!client || !config?.sessionId) return;
     try {
-        const workingMemory = await client.getWorkingMemory(
+        const workingMemory = await client.workingMemory.get(
             config.sessionId,
             config.userId,
             config.namespace,
@@ -350,7 +307,7 @@ async function pollWorking() {
 async function pollLongTerm() {
     if (!client) return;
     try {
-        // "This session" tab folds session_id into the filter so AMS scopes
+        // "This session" tab folds session_id into the filter so Redis Agent Memory scopes
         // the search to memories extracted from the connected session.
         // "Across sessions" leaves it out, preserving the existing
         // user-wide view.
@@ -360,7 +317,7 @@ async function pollLongTerm() {
             scope === "session" && config.sessionId
                 ? { ...baseFilter, sessionId: config.sessionId }
                 : baseFilter;
-        const data = await client.searchLongTermMemory(
+        const data = await client.longTermMemory.search(
             config.userId,
             config.namespace,
             filter,
@@ -388,7 +345,7 @@ async function handleSummaryRefresh() {
             ? summaryViewIds.sessionProfileViewId
             : summaryViewIds.userProfileViewId;
     // The group object must contain exactly the keys the view was created
-    // with - AMS rejects extras with HTTP 400 ("group keys ... must exactly
+    // with - Redis Agent Memory rejects extras with HTTP 400 ("group keys ... must exactly
     // match view.group_by"). session view is grouped by session_id only;
     // user view by user_id only.
     const group =
@@ -399,7 +356,7 @@ async function handleSummaryRefresh() {
     button.classList.add("is-spinning");
     setStatus("recomputing summary…");
     try {
-        const partition = await client.runSummaryViewPartition(viewId, group);
+        const partition = await client.summaryViews.runPartition(viewId, group);
         longTermPanel.setSummary(partition);
         setStatus(`summary recomputed ${timeStr()}`);
     } catch (err) {
@@ -429,7 +386,7 @@ async function refreshSummaryBanner() {
         scope === "session"
             ? { session_id: config.sessionId }
             : { user_id: config.userId };
-    const partitions = await client.listSummaryViewPartitions(viewId, filters);
+    const partitions = await client.summaryViews.listPartitions(viewId, filters);
     // Empty array → pass `{}` so the banner shows the empty-state copy
     // and keeps the ↻ refresh button reachable. Populated → pass the
     // partition itself.
@@ -451,7 +408,7 @@ async function handleWorkingClear() {
     );
     if (!ok) return;
     try {
-        await client.deleteWorkingMemory(
+        await client.workingMemory.delete(
             config.sessionId,
             config.userId,
             config.namespace,
@@ -467,7 +424,7 @@ async function handleWorkingClear() {
 async function handleLongTermDelete(memoryId) {
     if (!client) return;
     try {
-        await client.deleteLongTermMemory([memoryId]);
+        await client.longTermMemory.delete([memoryId]);
         setStatus(`deleted memory ${memoryId.slice(0, 12)}…`);
         await pollLongTerm();
     } catch (err) {

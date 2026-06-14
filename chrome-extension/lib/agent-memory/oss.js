@@ -1,5 +1,5 @@
 /**
- * OSS AMS client - talks to `redis/agent-memory-server`.
+ * OSS Redis Agent Memory client - talks to `redis/agent-memory-server`.
  *
  * Endpoint shape:
  *
@@ -164,7 +164,7 @@ export function createOssClient(config) {
         return res.json();
     }
 
-    // Force a fresh recompute for one partition. AMS runs the summarization
+    // Force a fresh recompute for one partition. Redis Agent Memory runs the summarization
     // LLM synchronously and returns the new SummaryViewPartitionResult. The
     // continuous worker's schedule is unaffected - it'll just see a fresher
     // cache the next time it ticks.
@@ -182,7 +182,7 @@ export function createOssClient(config) {
     }
 
     // Filters (user_id / session_id / namespace / memory_type) are query
-    // params on the endpoint - AMS scopes the returned partitions to records
+    // params on the endpoint - Redis Agent Memory scopes the returned partitions to records
     // that match, so we don't have to filter client-side.
     async function listSummaryViewPartitions(viewId, filters = {}) {
         const params = new URLSearchParams();
@@ -213,16 +213,31 @@ export function createOssClient(config) {
 
     return {
         backend: "oss",
-        pingHealth,
-        listSessions,
-        getWorkingMemory,
-        searchLongTermMemory,
-        discoverFilters,
-        deleteWorkingMemory,
-        deleteLongTermMemory,
-        listSummaryViews,
-        createSummaryView,
-        listSummaryViewPartitions,
-        runSummaryViewPartition,
+
+        // Cross-cutting capability flags
+        supportsNamespaces: true,
+        supportsUserIdServerFilter: true,
+
+        // Required domains
+        health: Object.freeze({ ping: pingHealth }),
+        sessions: Object.freeze({ list: listSessions }),
+        workingMemory: Object.freeze({
+            get: getWorkingMemory,
+            delete: deleteWorkingMemory,
+        }),
+        longTermMemory: Object.freeze({
+            search: searchLongTermMemory,
+            delete: deleteLongTermMemory,
+            supportsOptimizeQuery: true,
+        }),
+        discovery: Object.freeze({ filters: discoverFilters }),
+
+        // Optional domain (absent on backends that don't support it)
+        summaryViews: Object.freeze({
+            list: listSummaryViews,
+            create: createSummaryView,
+            listPartitions: listSummaryViewPartitions,
+            runPartition: runSummaryViewPartition,
+        }),
     };
 }

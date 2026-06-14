@@ -23,7 +23,7 @@ import { formatDateTime, relativeTime } from "../lib/format.js";
  *                              message so the ↻ refresh button stays
  *                              reachable (lets the user bootstrap the
  *                              first partition by clicking refresh
- *                              instead of waiting on AMS's hourly
+ *                              instead of waiting on Redis Agent Memory's hourly
  *                              continuous worker).
  *   setSummary(partition)    → show the populated banner.
  *
@@ -182,6 +182,25 @@ export function init({ onChange, onDelete }) {
 }
 
 /**
+ * Apply backend capability flags to the panel. Called by the main entry
+ * point right after a Connect, before the first poll fires. Hides UI
+ * affordances the connected backend doesn't support and resets the
+ * corresponding filter state so a stale toggle from a prior session
+ * doesn't leak through.
+ */
+export function setCapabilities({ optimizeQuery }) {
+    const optimizeWrapper =
+        $("ltm-optimize")?.closest("label, .ltm-optimize-wrapper") ??
+        $("ltm-optimize");
+    if (optimizeWrapper) optimizeWrapper.hidden = !optimizeQuery;
+    if (!optimizeQuery) {
+        const checkbox = $("ltm-optimize");
+        if (checkbox) checkbox.checked = false;
+        filter.optimizeQuery = false;
+    }
+}
+
+/**
  * Push the current filter context into the panel. Two effects:
  *
  *   1. Disable "This session" tab when there's no session to scope to. If
@@ -269,7 +288,7 @@ export function render(memories) {
 
     // Sort chronologically (oldest first) so the long-term pane scrolls the
     // same direction as working memory - new memories appear at the bottom.
-    // AMS's default order isn't chronological (it's relevance-ranked when
+    // Redis Agent Memory's default order isn't chronological (it's relevance-ranked when
     // there's a text query, and otherwise implementation-defined). Sorting
     // client-side gives consistent UX in all modes. The `score` field on
     // each card still shows similarity if you want to gauge ranking.
@@ -341,9 +360,9 @@ function buildCard(memory) {
         idElement.title = `Memory ID: ${memory.id}`;
     }
 
-    // Score is only present when AMS ranked this result (text query was
+    // Score is only present when Redis Agent Memory ranked this result (text query was
     // set). `score` is the composite (higher = better); `dist` is the raw
-    // vector distance; `score_type` reveals which scoring strategy AMS used.
+    // vector distance; `score_type` reveals which scoring strategy Redis Agent Memory used.
     if (typeof memory.score === "number") {
         const score = node.querySelector(".score-badge");
         score.hidden = false;
@@ -354,7 +373,7 @@ function buildCard(memory) {
             `type:  ${memory.score_type ?? "-"}`;
     }
 
-    // Per-card delete - hover-revealed, confirms before firing. AMS
+    // Per-card delete - hover-revealed, confirms before firing. Redis Agent Memory
     // supports DELETE /v1/long-term-memory?memory_ids=…; the caller
     // handles the actual request via the onDelete callback.
     if (memory.id) {
@@ -384,7 +403,7 @@ function buildCard(memory) {
 /**
  * Labelled chip row - "topics: [chip1] [chip2] [chip3]". Returns `null`
  * for empty lists so the caller can skip appending instead of leaving a
- * dangling label. Labels mirror AMS's own field names so the UI matches
+ * dangling label. Labels mirror Redis Agent Memory's own field names so the UI matches
  * the record shape.
  */
 function buildChipRow(label, values, chipClass) {

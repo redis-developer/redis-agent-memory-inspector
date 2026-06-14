@@ -55,25 +55,10 @@
                     </span>
                 </template>
                 <template id="picker-pill-template">
-                    <span class="pill-picker">
-                        <button type="button" class="pill pill-button">
-                            <span class="pill-key"></span>
-                            <span class="pill-value"></span>
-                            <span class="pill-caret" aria-hidden="true">▾</span>
-                        </button>
-                        <div class="pill-popover" hidden>
-                            <input
-                                type="text"
-                                class="pill-search"
-                                autocomplete="off"
-                                spellcheck="false"
-                            />
-                            <datalist></datalist>
-                            <div class="pill-popover-actions">
-                                <button type="button" class="pill-popover-apply">Apply</button>
-                            </div>
-                        </div>
-                    </span>
+                    <label class="pill pill-picker">
+                        <span class="pill-key"></span>
+                        <select class="pill-select"></select>
+                    </label>
                 </template>
                 <button
                     id="refresh-button"
@@ -358,7 +343,7 @@
                         />
                         <label
                             class="optimize-toggle"
-                            title="Pre-process the search query with an LLM to expand and refine it before searching. AMS does not return the rewritten query."
+                            title="Pre-process the search query with an LLM to expand and refine it before searching."
                         >
                             <input id="ltm-optimize" type="checkbox" />
                             <span>optimize</span>

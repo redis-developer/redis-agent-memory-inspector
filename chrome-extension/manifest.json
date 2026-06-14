@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "Redis Agent Memory Inspector",
-    "description": "Inspect working memory and long-term memory of any app that uses Redis Agent Memory Server",
+    "description": "Inspect and debug working memory and long-term memory of any app that uses Redis Agent Memory",
     "version": "0.1.0",
     "action": {
         "default_title": "Redis Agent Memory Inspector",

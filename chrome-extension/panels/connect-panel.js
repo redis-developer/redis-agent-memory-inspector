@@ -1,6 +1,6 @@
 /**
- * Connect panel - the AMS-URL / namespace / refresh-cadence form shown when
- * the inspector window opens. Probes AMS's health and lists discoverable
+ * Connect panel - the Redis Agent Memory-URL / namespace / refresh-cadence form shown when
+ * the inspector window opens. Probes Redis Agent Memory's health and lists discoverable
  * namespaces so the dropdown autofills from real data.
  *
  * User + session selection happens in the inspector view after connect (see
@@ -14,7 +14,7 @@
  */
 
 import { $ } from "../lib/dom.js";
-import { createAmsClient } from "../lib/ams-client.js";
+import { createAgentMemoryClient } from "../lib/agent-memory-client.js";
 
 /** Selected backend from the radio group ("oss" or "cloud"). */
 function selectedBackend() {
@@ -45,7 +45,7 @@ function probeClient() {
         // decide. Trim trailing slashes to keep URL building consistent.
         const proxyUrl =
             $("config-proxy-url").value.trim().replace(/\/+$/, "") || null;
-        return createAmsClient({
+        return createAgentMemoryClient({
             backend,
             url,
             apiKey,
@@ -53,7 +53,7 @@ function probeClient() {
             proxyUrl,
         });
     }
-    return createAmsClient({ backend, url });
+    return createAgentMemoryClient({ backend, url });
 }
 
 const HEALTH_DEBOUNCE_MS = 1000;
@@ -217,7 +217,7 @@ async function runDiscovery(_seed = null) {
     const url = $("config-url").value.trim().replace(/\/+$/, "");
     setStatus(`Probing ${url}…`);
     const badge = $("url-health");
-    const health = await probe.pingHealth();
+    const health = await probe.health.ping();
     if (health.ok) {
         badge.textContent = "✓ live";
         badge.className = "health-badge is-live";

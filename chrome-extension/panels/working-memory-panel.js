@@ -31,7 +31,7 @@ export function reset() {
 
 /**
  * Render the pane from a working-memory response. Caller is responsible
- * for fetching `workingMemory` from AMS; this function just paints.
+ * for fetching `workingMemory` from Redis Agent Memory; this function just paints.
  */
 export function render(workingMemory) {
     const messages = workingMemory.messages ?? [];

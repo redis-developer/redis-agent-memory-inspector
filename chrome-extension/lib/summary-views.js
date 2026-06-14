@@ -2,18 +2,16 @@
  * Summary-view bootstrap.
  *
  * On Connect, the inspector ensures the two SummaryView configs it needs
- * exist in the target AMS. They're looked up by `name` (which we own and
- * namespace with `inspector:`) because AMS assigns the `id` server-side -
+ * exist in the target Redis Agent Memory. They're looked up by `name` (which we own and
+ * namespace with `inspector:`) because Redis Agent Memory assigns the `id` server-side -
  * we can't pass our own. If a view is missing, we create it with
- * `continuous: true` so AMS's background worker keeps its partition
+ * `continuous: true` so Redis Agent Memory's background worker keeps its partition
  * results refreshed without further help from the inspector.
  *
- * Self-installing means the inspector works against any AMS without a
- * separate setup script. Safe to run on every Connect - idempotent.
  *
- * The Cloud backend stubs return `[]` / throw; we wrap the create in a
- * try/catch and the caller treats a failed bootstrap as "no banners for
- * this connection." UI degrades gracefully, never blocks Connect.
+ * Backends that don't support summary views (Cloud) don't expose
+ * `client.summaryViews` at all - we short-circuit and return null. UI
+ * degrades gracefully, never blocks Connect.
  */
 
 const VIEW_NAMES = {
@@ -22,20 +20,21 @@ const VIEW_NAMES = {
 };
 
 /**
- * Ensure the two inspector views exist in the connected AMS.
+ * Ensure the two inspector views exist in the connected Redis Agent Memory endpoint.
  *
  * Returns { userProfileViewId, sessionProfileViewId } on success.
  * Returns null if the backend doesn't support summary views (Cloud) or
  * the calls fail - caller treats null as "skip banners."
  */
 export async function ensureSummaryViews(client) {
+    if (!client.summaryViews) return null;
     try {
-        const existing = await client.listSummaryViews();
+        const existing = await client.summaryViews.list();
         const byName = new Map(existing.map((v) => [v.name, v]));
 
         const userProfile =
             byName.get(VIEW_NAMES.userProfile) ??
-            (await client.createSummaryView({
+            (await client.summaryViews.create({
                 name: VIEW_NAMES.userProfile,
                 source: "long_term",
                 group_by: ["user_id"],
@@ -44,7 +43,7 @@ export async function ensureSummaryViews(client) {
 
         const sessionProfile =
             byName.get(VIEW_NAMES.sessionProfile) ??
-            (await client.createSummaryView({
+            (await client.summaryViews.create({
                 name: VIEW_NAMES.sessionProfile,
                 source: "long_term",
                 group_by: ["session_id"],

@@ -237,94 +237,42 @@ body {
 
 /*
  * Picker pill - a clickable variant of the connection pill. Shares the
- * pill chrome so static and interactive pills line up in the header, but
- * adds a caret + hover state and renders a popover combobox underneath
- * when opened. The wrapper is positioned so the popover anchors to it.
+ * pill chrome so static and interactive pills line up in the header.
+ * The interactive variant wraps a native <select> for accessibility +
+ * keyboard nav; we just style the chrome around it.
  */
 .pill-picker {
-    position: relative;
-    display: inline-flex;
-
-    & .pill-button {
-        cursor: pointer;
-        font-family: var(--font-mono);
-        font-size: 0.6875rem;
-        line-height: 1.4;
-        color: var(--color-text-secondary);
-        background: var(--color-bg-tertiary);
-        border: 1px solid var(--color-border);
-        transition: background 0.12s ease, border-color 0.12s ease;
-    }
-
-    & .pill-button:hover,
-    &.is-open .pill-button {
-        background: var(--color-bg-secondary);
-        border-color: var(--color-border-strong);
-    }
-
-    & .pill-caret {
-        color: var(--color-text-muted);
-        font-size: 0.625rem;
-        margin-left: 0.15rem;
-        transition: transform 0.12s ease;
-    }
-
-    &.is-open .pill-caret {
-        transform: rotate(180deg);
-    }
-}
-
-.pill-popover {
-    position: absolute;
-    top: calc(100% + 6px);
-    right: 0;
-    z-index: 50;
-    min-width: 260px;
-    padding: var(--spacing-xs);
-    background: var(--color-bg-primary);
-    border: 1px solid var(--color-border-strong);
-    border-radius: var(--border-radius);
-    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
-    display: flex;
-    flex-direction: column;
-    gap: var(--spacing-xs);
-
-    & .pill-search {
-        width: 100%;
-        padding: 6px 8px;
-        background: var(--color-bg-secondary);
-        border: 1px solid var(--color-border);
-        border-radius: var(--border-radius);
-        color: var(--color-text);
-        font-family: var(--font-mono);
-        font-size: 0.8125rem;
-        outline: none;
-    }
-
-    & .pill-search:focus {
-        border-color: var(--color-primary);
-    }
-}
-
-.pill-popover-actions {
-    display: flex;
-    justify-content: flex-end;
-}
-
-.pill-popover-apply {
-    background: var(--color-primary);
-    color: #fff;
-    border: none;
-    border-radius: var(--border-radius);
-    padding: 4px 12px;
-    font-family: var(--font-display);
-    font-size: 0.75rem;
-    font-weight: 600;
     cursor: pointer;
+    gap: 0.3rem;
+    background: var(--color-bg-tertiary);
+    border: 1px solid var(--color-border);
+    transition: background 0.12s ease, border-color 0.12s ease;
+}
 
-    &:hover {
-        filter: brightness(1.05);
-    }
+.pill-picker:hover,
+.pill-picker:focus-within {
+    background: var(--color-bg-secondary);
+    border-color: var(--color-border-strong);
+}
+
+.pill-select {
+    appearance: none;
+    background: transparent;
+    border: none;
+    padding: 0;
+    margin: 0;
+    color: var(--color-text);
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    line-height: 1.4;
+    cursor: pointer;
+    outline: none;
+    padding-right: 0.9rem;
+    background-image: linear-gradient(45deg, transparent 50%, var(--color-text-muted) 50%),
+                      linear-gradient(135deg, var(--color-text-muted) 50%, transparent 50%);
+    background-position: calc(100% - 0.45rem) 50%, calc(100% - 0.2rem) 50%;
+    background-size: 0.25rem 0.25rem, 0.25rem 0.25rem;
+    background-repeat: no-repeat;
 }
 
 /* end of styles for pills */

@@ -39,7 +39,7 @@ app.use((req, _res, next) => {
 });
 
 // Capture the raw body for every Content-Type so we can forward POSTs
-// (JSON, etc.) verbatim. 10mb cap is generous for any AMS payload.
+// (JSON, etc.) verbatim.
 app.use(express.raw({ type: "*/*", limit: "10mb" }));
 
 // CORS: the Chrome extension runs from a chrome-extension:// origin, so
