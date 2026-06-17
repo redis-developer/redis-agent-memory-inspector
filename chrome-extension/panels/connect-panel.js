@@ -4,17 +4,23 @@
  * namespaces so the dropdown autofills from real data.
  *
  * User + session selection happens in the inspector view after connect (see
- * the picker pills in index.js). The connect panel deliberately doesn't
+ * the picker pills in inspector.js). The connect panel deliberately doesn't
  * surface those - they're a "which slice of the data am I looking at" choice,
  * not a "how do I reach the server" choice.
  *
  * The panel doesn't own the config - it gathers values and hands them to the
  * caller via `onConnect(config)` once the user clicks Connect. The caller
- * (index.js) decides what to do with that config.
+ * (inspector.js) decides what to do with that config.
  */
 
 import { $ } from "../lib/dom.js";
 import { createAgentMemoryClient } from "../lib/agent-memory-client.js";
+import {
+    loadAll as loadSavedConnections,
+    getLastUsed as getLastUsedConnection,
+    save as saveConnection,
+    remove as forgetConnection,
+} from "../lib/saved-connections.js";
 
 /** Selected backend from the radio group ("oss" or "cloud"). */
 function selectedBackend() {
@@ -22,6 +28,24 @@ function selectedBackend() {
         'input[name="config-backend"]:checked',
     );
     return checked?.value ?? "oss";
+}
+
+/**
+ * Backend-aware accessors for the URL input + its health badge. The form
+ * has two URL fields (one per backend) shown/hidden via
+ * `applyBackendVisibility`. Everything else in this file just asks
+ * "give me the active one" so we don't sprinkle backend checks
+ * everywhere.
+ */
+function activeUrlInput() {
+    return selectedBackend() === "cloud"
+        ? $("config-url-cloud")
+        : $("config-url-oss");
+}
+function activeHealthBadge() {
+    return selectedBackend() === "cloud"
+        ? $("url-health-cloud")
+        : $("url-health-oss");
 }
 
 /**
@@ -34,7 +58,7 @@ function selectedBackend() {
  * probe doesn't fire half-configured requests.
  */
 function probeClient() {
-    const url = $("config-url").value.trim().replace(/\/+$/, "");
+    const url = activeUrlInput().value.trim().replace(/\/+$/, "");
     if (!url) return null;
     const backend = selectedBackend();
     if (backend === "cloud") {
@@ -59,6 +83,7 @@ function probeClient() {
 const HEALTH_DEBOUNCE_MS = 1000;
 let healthDebounce = null;
 let onConnectCallback = null;
+let savedConnectionsListenersBound = false;
 
 function setStatus(s) {
     $("status-line").textContent = s;
@@ -71,38 +96,50 @@ function setStatus(s) {
 export function show({ seed = {}, onConnect }) {
     onConnectCallback = onConnect;
 
-    $("connect-panel").hidden = false;
-    $("inspector-view").hidden = true;
-    $("connection-pills").hidden = true;
-    $("reconfigure-button").hidden = true;
-    $("refresh-button").hidden = true;
-
-    const urlInput = $("config-url");
-    if (seed.url) urlInput.value = seed.url;
-    urlInput.addEventListener("input", onUrlInput);
+    // Connect panel lives in its own page (config.html) now - no
+    // sibling inspector view to hide on the same DOM. The other
+    // header/connection-pill elements only exist on inspector.html.
 
     // Pre-fill cloud-only fields if the seed has them; pre-select the
-    // backend radio according to the seed (defaults to "oss").
+    // backend radio according to the seed (defaults to "oss"). The URL
+    // seed lands in the field for the seed's backend - if a seed without
+    // an explicit backend has a URL, it goes to OSS by default.
     if (seed.backend === "cloud") {
         document.querySelector(
             'input[name="config-backend"][value="cloud"]',
         ).checked = true;
+        if (seed.url) $("config-url-cloud").value = seed.url;
+    } else if (seed.url) {
+        $("config-url-oss").value = seed.url;
     }
     if (seed.apiKey) $("config-api-key").value = seed.apiKey;
     if (seed.storeId) $("config-store-id").value = seed.storeId;
     if (seed.proxyUrl) $("config-proxy-url").value = seed.proxyUrl;
     applyBackendVisibility();
 
+    // Bind URL/credential listeners on both URL inputs - whichever is
+    // visible at a given moment is the one the user is editing. We
+    // attach to both up front so we don't have to rebind when the user
+    // flips the backend radio.
+    $("config-url-oss").addEventListener("input", onUrlInput);
+    $("config-url-cloud").addEventListener("input", onUrlInput);
+    $("config-url-oss").addEventListener("focus", (e) => e.target.select());
+    $("config-url-cloud").addEventListener("focus", (e) => e.target.select());
+
     // Switching backend changes which fields are required + may need a
-    // re-probe of the new URL/credentials. Also wipe the health badge so a
-    // stale ✓ live doesn't carry over from the previous backend.
+    // re-probe of the new URL/credentials. Also wipe both health badges
+    // so a stale ✓ live doesn't carry over from the previous backend.
     for (const radio of document.querySelectorAll(
         'input[name="config-backend"]',
     )) {
         radio.addEventListener("change", () => {
             applyBackendVisibility();
-            $("url-health").textContent = "";
-            $("url-health").className = "health-badge";
+            clearHealthBadges();
+            // Saved-connections dropdown is scoped to the active
+            // backend; re-render so the options reflect the new choice.
+            renderSavedConnections().catch((err) =>
+                console.warn("[connect-panel] saved-connections re-render failed:", err.message),
+            );
             updateConnectButton();
             runDiscovery();
         });
@@ -116,10 +153,6 @@ export function show({ seed = {}, onConnect }) {
     $("config-store-id").addEventListener("input", onUrlInput);
     $("config-proxy-url").addEventListener("input", onUrlInput);
 
-    // Select-all on focus for the URL input. Without this, clicking into a
-    // pre-filled field lands the cursor at the end and typing appends.
-    $("config-url").addEventListener("focus", (e) => e.target.select());
-
     // Pre-fill refresh-interval inputs from seed config if it has them. The config
     // stores intervals in milliseconds; the inputs work in seconds because
     // that's the unit users think in.
@@ -130,14 +163,135 @@ export function show({ seed = {}, onConnect }) {
         $("config-longterm-refresh").value = Math.round(seed.longTermMemoryRefreshMs / 1000);
     }
 
-    $("connect-button").addEventListener("click", () => {
+    // Form submit (Enter on any input OR Connect button click) drives the
+    // connect flow. preventDefault stops the browser from doing a real
+    // GET navigation; we hand off to the parent via onConnect instead.
+    $("connect-form").addEventListener("submit", (event) => {
+        event.preventDefault();
         const config = readFormConfig();
+        // Persist before handing off so the next window-open auto-picks
+        // this connection. Fire-and-forget; storage failures shouldn't
+        // block connect.
+        saveConnection(config).catch((err) =>
+            console.warn("[connect-panel] save failed:", err.message),
+        );
         onConnectCallback?.(config);
     });
 
-    // Kick off discovery immediately so the namespace dropdown populates from
-    // the current URL.
-    runDiscovery(seed);
+    // If we weren't given an explicit seed (i.e. fresh window open, not
+    // a Reconfigure), fall back to the last-used entry from
+    // chrome.storage.session so the user just sees the form pre-filled
+    // and can hit Connect. Hydrate first (which may flip the backend
+    // radio), then render saved connections so the dropdown reflects
+    // the active backend, then probe.
+    if (!seed?.url) {
+        getLastUsedConnection().then((last) => {
+            if (last) hydrateForm(last);
+            renderSavedConnections().catch((err) =>
+                console.warn("[connect-panel] render saved failed:", err.message),
+            );
+            runDiscovery(last ?? seed);
+        });
+    } else {
+        renderSavedConnections().catch((err) =>
+            console.warn("[connect-panel] render saved failed:", err.message),
+        );
+        runDiscovery(seed);
+    }
+}
+
+/**
+ * Populate every connect-form field from a stored connection. Mirrors
+ * the seed-handling in `show()` but in one place so loading from
+ * saved-connections doesn't drift from the Reconfigure path.
+ */
+function hydrateForm(config) {
+    if (config.backend === "cloud") {
+        document.querySelector(
+            'input[name="config-backend"][value="cloud"]',
+        ).checked = true;
+        $("config-url-cloud").value = config.url ?? "";
+        $("config-api-key").value = config.apiKey ?? "";
+        $("config-store-id").value = config.storeId ?? "";
+        $("config-proxy-url").value = config.proxyUrl ?? "";
+    } else {
+        document.querySelector(
+            'input[name="config-backend"][value="oss"]',
+        ).checked = true;
+        $("config-url-oss").value = config.url ?? "";
+    }
+    if (typeof config.workingMemoryRefreshMs === "number") {
+        $("config-working-refresh").value = Math.round(config.workingMemoryRefreshMs / 1000);
+    }
+    if (typeof config.longTermMemoryRefreshMs === "number") {
+        $("config-longterm-refresh").value = Math.round(config.longTermMemoryRefreshMs / 1000);
+    }
+    applyBackendVisibility();
+    updateConnectButton();
+}
+
+/**
+ * Render the saved-connections dropdown at the top of the connect panel.
+ * Native <select> with one <option> per saved entry; the last-used entry
+ * is pre-selected. The × button next to the dropdown forgets whichever
+ * entry is currently selected.
+ *
+ * Listeners are bound once (idempotent via a flag on the elements
+ * themselves) so re-renders after add/forget don't duplicate them.
+ */
+async function renderSavedConnections() {
+    const wrap = $("saved-connections");
+    const select = $("saved-connections-select");
+    const forgetButton = $("saved-connections-forget");
+    if (!wrap || !select || !forgetButton) return;
+
+    // Show only entries that match the currently-picked backend - the
+    // dropdown lives below the Backend radio, so its contents are scoped
+    // to the active choice. Flipping the radio re-renders us.
+    const backend = selectedBackend();
+    const allEntries = await loadSavedConnections();
+    const entries = allEntries.filter((e) => e.backend === backend);
+    if (entries.length === 0) {
+        wrap.hidden = true;
+        select.innerHTML = "";
+        return;
+    }
+
+    const lastUsed = await getLastUsedConnection();
+    const preselect = lastUsed && lastUsed.backend === backend ? lastUsed.id : null;
+    select.innerHTML = "";
+    for (const entry of entries) {
+        const opt = document.createElement("option");
+        opt.value = entry.id;
+        opt.textContent = entry.alias;
+        if (preselect === entry.id) opt.selected = true;
+        select.appendChild(opt);
+    }
+
+    // Bind listeners exactly once. The <select> and × button are the
+    // same DOM nodes across every renderSavedConnections() call - we
+    // only refill the <option>s - so re-binding on every call would
+    // stack duplicate handlers and fire the callback N times per click.
+    if (!savedConnectionsListenersBound) {
+        savedConnectionsListenersBound = true;
+        select.addEventListener("change", async () => {
+            const entry = (await loadSavedConnections()).find(
+                (e) => e.id === select.value,
+            );
+            if (entry) {
+                hydrateForm(entry);
+                runDiscovery(entry);
+            }
+        });
+        forgetButton.addEventListener("click", async () => {
+            const id = select.value;
+            if (!id) return;
+            await forgetConnection(id);
+            renderSavedConnections();
+        });
+    }
+
+    wrap.hidden = false;
 }
 
 function readFormConfig() {
@@ -151,7 +305,7 @@ function readFormConfig() {
     const backend = selectedBackend();
     const config = {
         backend,
-        url: $("config-url").value.trim().replace(/\/+$/, ""),
+        url: activeUrlInput().value.trim().replace(/\/+$/, ""),
         // userId + sessionId are picked in the inspector view (header
         // pills), not here. Left null until the auto-pick runs.
         userId: null,
@@ -190,9 +344,20 @@ function isCompleteConfig(config) {
 function applyBackendVisibility() {
     const backend = selectedBackend();
     const isCloud = backend === "cloud";
+    $("field-url-oss").hidden = isCloud;
+    $("field-url-cloud").hidden = !isCloud;
     $("field-store-id").hidden = !isCloud;
     $("field-api-key").hidden = !isCloud;
     $("field-proxy-url").hidden = !isCloud;
+}
+
+function clearHealthBadges() {
+    for (const id of ["url-health-oss", "url-health-cloud"]) {
+        const el = $(id);
+        if (!el) continue;
+        el.textContent = "";
+        el.className = "health-badge";
+    }
 }
 
 function updateConnectButton() {
@@ -201,8 +366,7 @@ function updateConnectButton() {
 
 function onUrlInput() {
     clearTimeout(healthDebounce);
-    $("url-health").textContent = "";
-    $("url-health").className = "health-badge";
+    clearHealthBadges();
     healthDebounce = setTimeout(() => runDiscovery(), HEALTH_DEBOUNCE_MS);
 }
 
@@ -214,9 +378,9 @@ async function runDiscovery(_seed = null) {
     const probe = probeClient();
     if (!probe) return;
 
-    const url = $("config-url").value.trim().replace(/\/+$/, "");
+    const url = activeUrlInput().value.trim().replace(/\/+$/, "");
     setStatus(`Probing ${url}…`);
-    const badge = $("url-health");
+    const badge = activeHealthBadge();
     const health = await probe.health.ping();
     if (health.ok) {
         badge.textContent = "✓ live";

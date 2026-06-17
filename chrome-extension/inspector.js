@@ -1,15 +1,13 @@
 /**
- * Entry point - wires DOM events to panel modules and the polling controller.
+ * Inspector entry point - reads the active connection from
+ * chrome.storage.session (written by config.js when the user clicks
+ * Connect) and runs the poller against it. If storage is empty, bounces
+ * back to config.html so the user can re-enter credentials.
  *
- * Lifecycle:
- *   1. On DOMContentLoaded, show the connect panel for the user to fill in.
- *   2. After Connect, discover users + sessions, auto-pick the most recent,
- *      then start the visibility-aware poller.
- *
- * The inspector holds no persistent state - every open of the window starts
- * from a clean connect form. `config` lives only in this module for the
- * lifetime of the window. User + session can be re-picked at any time from
- * the header picker pills without reconnecting.
+ * The inspector holds no persistent state across the page itself - all
+ * config + saved-connections state lives in chrome.storage.session and
+ * is read fresh on load. User + session can be re-picked at any time
+ * from the header picker pills without reconnecting.
  */
 
 import { $, fromTemplate } from "./lib/dom.js";
@@ -17,12 +15,12 @@ import { createAgentMemoryClient } from "./lib/agent-memory-client.js";
 import { createPoller } from "./lib/polling.js";
 import { timeStr } from "./lib/format.js";
 import { ensureSummaryViews } from "./lib/summary-views.js";
+import { getActive, clearActive } from "./lib/saved-connections.js";
 import * as workingPanel from "./panels/working-memory-panel.js";
 import * as longTermPanel from "./panels/long-term-memory-panel.js";
-import * as connectPanel from "./panels/connect-panel.js";
 
-// Fallback poll cadences when the config from the connect panel doesn't supply
-// explicit values (the form provides them by default, so this rarely fires).
+// Fallback poll cadences when the config doesn't supply explicit values
+// (the connect form provides them by default, so this rarely fires).
 const WORKING_MEMORY_REFRESH_MS = 3000;
 const LONG_TERM_MEMORY_REFRESH_MS = 5000;
 
@@ -32,6 +30,14 @@ let client = null; // backend-specific Redis Agent Memory client, created on con
 let summaryViewIds = null; // { userProfileViewId, sessionProfileViewId } | null
 
 document.addEventListener("DOMContentLoaded", async () => {
+    const active = await getActive();
+    if (!active) {
+        // Direct hit on inspector.html without going through config first -
+        // bounce back to the connect page.
+        window.location.href = "config.html";
+        return;
+    }
+
     // Long-term panel owns its filter state and per-card delete affordance.
     // We subscribe so a filter change triggers a refetch, and we provide a
     // delete handler that calls Redis Agent Memory then refetches.
@@ -40,11 +46,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         onDelete: handleLongTermDelete,
     });
 
-    connectPanel.show({ seed: {}, onConnect: connect });
-
-    $("reconfigure-button").addEventListener("click", () => {
+    $("reconfigure-button").addEventListener("click", async () => {
         poller?.stop();
-        connectPanel.show({ seed: config ?? {}, onConnect: connect });
+        await clearActive();
+        window.location.href = "config.html";
     });
 
     $("refresh-button").addEventListener("click", refreshNow);
@@ -53,11 +58,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     // because the operation is destructive (no soft delete, no undo).
     $("working-clear-button").addEventListener("click", handleWorkingClear);
 
-    // Summary-view refresh: forces Redis Agent Memory to re-run the LLM for the active
-    // scope's partition. Disabled while in flight to prevent concurrent
-    // runs; the spinning class on the icon signals progress.
+    // Summary-view refresh: forces Redis Agent Memory to re-run the LLM for
+    // the active scope's partition. Disabled while in flight to prevent
+    // concurrent runs; the spinning class on the icon signals progress.
     $("ltm-summary-refresh").addEventListener("click", handleSummaryRefresh);
 
+    await connect(active);
 });
 
 async function connect(newConfig) {
@@ -68,12 +74,6 @@ async function connect(newConfig) {
     longTermPanel.setCapabilities({
         optimizeQuery: client.longTermMemory.supportsOptimizeQuery,
     });
-
-    $("connect-panel").hidden = true;
-    $("inspector-view").hidden = false;
-    $("connection-pills").hidden = false;
-    $("reconfigure-button").hidden = false;
-    $("refresh-button").hidden = false;
 
     // Pick the most recent namespace + user + session before the first poll
     // fires. If discovery finds nothing for any of them, leave that field
@@ -102,10 +102,10 @@ async function connect(newConfig) {
 }
 
 /**
- * Run discovery on the now-live client to seed config.namespace + config.userId +
- * config.sessionId with the most recently active values. discoverFilters()
- * preserves LTM-scan order, so users[0] / namespaces[0] = most recent.
- * listSessions() returns ordered sessions; we take the first.
+ * Run discovery on the now-live client to seed config.namespace +
+ * config.userId + config.sessionId with the most recently active values.
+ * discoverFilters() preserves LTM-scan order, so users[0] / namespaces[0]
+ * = most recent. listSessions() returns ordered sessions; we take the first.
  */
 async function autoPickFilters() {
     try {
@@ -233,8 +233,8 @@ const NO_FILTER_LABEL = "(none)";
  * screen-reader support, type-ahead, and click-outside handling for free.
  *
  * If `allowNone` is true, the dropdown surfaces a "(none)" entry mapped
- * to `onPick(null)` - useful for Redis Agent Memory filters that can be unset to broaden
- * the scope (user_id, namespace, session_id).
+ * to `onPick(null)` - useful for Redis Agent Memory filters that can be
+ * unset to broaden the scope (user_id, namespace, session_id).
  *
  * Options are fetched once when the pill mounts. Pills are re-mounted on
  * every connect/filter change in `renderConnectionPills()`, so the list
@@ -261,8 +261,8 @@ function pickerPill({ key, value, getOptions, onPick, allowNone = false }) {
     });
 
     // Populate the real options. Done async so an `await getOptions()`
-    // that talks to Redis Agent Memory doesn't block the rest of the pill row from
-    // rendering.
+    // that talks to Redis Agent Memory doesn't block the rest of the pill
+    // row from rendering.
     (async () => {
         try {
             const options = await getOptions();
@@ -307,10 +307,10 @@ async function pollWorking() {
 async function pollLongTerm() {
     if (!client) return;
     try {
-        // "This session" tab folds session_id into the filter so Redis Agent Memory scopes
-        // the search to memories extracted from the connected session.
-        // "Across sessions" leaves it out, preserving the existing
-        // user-wide view.
+        // "This session" tab folds session_id into the filter so Redis
+        // Agent Memory scopes the search to memories extracted from the
+        // connected session. "Across sessions" leaves it out, preserving
+        // the existing user-wide view.
         const scope = longTermPanel.getScope();
         const baseFilter = longTermPanel.getFilter();
         const filter =
@@ -328,8 +328,8 @@ async function pollLongTerm() {
         setStatus(`long-term memory: ${err.message}`);
     }
     // Refresh the summary-view banner on the same cadence. Independent
-    // try/catch so a summary-views 404 (Cloud, or AMS too old) doesn't mask
-    // the LTM update above.
+    // try/catch so a summary-views 404 (Cloud, or AMS too old) doesn't
+    // mask the LTM update above.
     refreshSummaryBanner().catch((err) =>
         console.warn("[inspector] summary banner refresh failed:", err.message),
     );
@@ -345,9 +345,9 @@ async function handleSummaryRefresh() {
             ? summaryViewIds.sessionProfileViewId
             : summaryViewIds.userProfileViewId;
     // The group object must contain exactly the keys the view was created
-    // with - Redis Agent Memory rejects extras with HTTP 400 ("group keys ... must exactly
-    // match view.group_by"). session view is grouped by session_id only;
-    // user view by user_id only.
+    // with - Redis Agent Memory rejects extras with HTTP 400 ("group keys
+    // ... must exactly match view.group_by"). session view is grouped by
+    // session_id only; user view by user_id only.
     const group =
         scope === "session"
             ? { session_id: config.sessionId }

@@ -1,0 +1,258 @@
+/* Shared styles - loaded by both config.html and inspector.html. */
+
+:root {
+    --color-primary: #ff4438;
+    --color-accent: #dcff1c;
+    --color-secondary: #c796e4;
+    --color-dark: #2d4754;
+    --color-text: #091a23;
+    --color-text-secondary: rgba(9, 26, 35, 0.7);
+    --color-text-muted: rgba(9, 26, 35, 0.5);
+    --color-bg-primary: #ffffff;
+    --color-bg-secondary: #f8f9fa;
+    --color-bg-tertiary: #f1f3f5;
+    --color-border: #e1e5e9;
+    --color-border-strong: #c8ced3;
+    --color-info: #7fdbfe;
+    --color-danger: #f44336;
+    --color-success: #2db96b;
+
+    /* Shared accent for the role-tag pills in the working pane and the
+     * active tab in the long-term pane - so "user / assistant / active
+     * scope" all read as the same emphasis. Dark mode overrides the
+     * text color; the alpha bg tint works on both backgrounds. */
+    --color-role-accent: #0a6e9c;
+    --color-role-accent-bg: rgba(127, 219, 254, 0.18);
+
+    --border-radius: 4px;
+    --border-radius-lg: 8px;
+
+    --spacing-xs: 0.5rem;
+    --spacing-sm: 1rem;
+    --spacing-md: 1.5rem;
+    --spacing-lg: 2rem;
+
+    --font-display: "Space Grotesk", system-ui, sans-serif;
+    --font-mono: "Space Mono", ui-monospace, monospace;
+}
+
+/*
+ * Dark mode - driven entirely by a hidden checkbox in each HTML file. The
+ * CSS variables below override the light defaults whenever #theme-toggle
+ * is :checked, and every component that reads from those variables flips
+ * automatically. A few sites use hardcoded chip/badge colors that don't
+ * go through variables; those have their own per-component overrides
+ * nested inside the relevant block via `body:has(#theme-toggle:checked) &`.
+ *
+ * No JavaScript involved - works on any modern Chrome (the inspector's
+ * only target), since `:has()` ships in Chrome 105+.
+ */
+body:has(#theme-toggle:checked) {
+    --color-text: #eef1f4;
+    --color-text-secondary: rgba(238, 241, 244, 0.75);
+    --color-text-muted: rgba(238, 241, 244, 0.5);
+    --color-bg-primary: #1d2731;
+    --color-bg-secondary: #151d25;
+    --color-bg-tertiary: #2a3540;
+    --color-border: #2d3a48;
+    --color-border-strong: #44525f;
+    --color-role-accent: var(--color-info);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+/*
+ * Visually hide an interactive element (used for the dark-mode checkbox)
+ * while keeping it accessible to assistive tech + interactable via its
+ * <label for="...">.
+ */
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/*
+ * The HTML `hidden` attribute would normally apply `display: none` via the
+ * user-agent stylesheet, but our class rules below set `display: flex` /
+ * `display: grid`, which would silently override it. Force `hidden` to win
+ * so JS-driven show/hide actually works.
+ */
+[hidden] {
+    display: none !important;
+}
+
+/*
+ * Keep html at the browser default (16px) so `1rem` = 16px throughout. If
+ * we set font-size on html here in rem, html would resolve it against its
+ * own initial value and the root would shrink - pulling every rem-sized
+ * element down with it.
+ */
+html {
+    height: 100%;
+}
+
+body {
+    margin: 0;
+    height: 100%;
+    background: var(--color-bg-secondary);
+    color: var(--color-text);
+    font-family: var(--font-display);
+    font-size: 0.8125rem; /* = 13px against 16px root */
+    line-height: 1.45;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+/* Shared animations referenced by multiple components. */
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+@keyframes card-flash {
+    0% {
+        background: var(--color-accent);
+        border-color: var(--color-accent);
+    }
+    100% {
+        background: var(--color-bg-primary);
+        border-color: var(--color-border);
+    }
+}
+
+/* ---------- header ---------- */
+
+.app-header {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    background: var(--color-bg-primary);
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+
+    & h1 {
+        font-size: 0.875rem;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        margin: 0;
+    }
+}
+
+.app-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.app-icon {
+    width: 1.5rem;
+    height: 1.5rem;
+    flex-shrink: 0;
+
+    /* The icon is duotone with hardcoded fills (#163341 + #FF4438). On dark
+     * backgrounds the dusk-dark paths disappear; invert + hue-rotate flips
+     * darks to lights while keeping the red recognisable as red. */
+    body:has(#theme-toggle:checked) & {
+        filter: invert(1) hue-rotate(180deg);
+    }
+}
+
+/*
+ * Everything that should hug the right edge of the header - connection
+ * pills, theme toggle, refresh, reconfigure - sits in this flex group.
+ * `margin-left: auto` pushes the whole group right, leaving the title +
+ * icon on the left.
+ */
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    margin-left: auto;
+}
+
+.app-footer {
+    flex-shrink: 0;
+    padding: 4px var(--spacing-sm);
+    background: var(--color-bg-primary);
+    border-top: 1px solid var(--color-border);
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    color: var(--color-text-muted);
+}
+
+/* ---------- shared buttons ---------- */
+
+.link-button {
+    background: none;
+    border: none;
+    color: var(--color-text-secondary);
+    font-family: var(--font-display);
+    font-size: 0.75rem;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: var(--border-radius);
+
+    &:hover {
+        background: var(--color-bg-tertiary);
+        color: var(--color-text);
+    }
+}
+
+.icon-button {
+    background: none;
+    border: 1px solid var(--color-border);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: var(--border-radius);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.875rem;
+    line-height: 1;
+    transition: transform 400ms ease, background 150ms ease, color 150ms ease;
+
+    &:hover {
+        background: var(--color-bg-tertiary);
+        color: var(--color-text);
+    }
+
+    &.is-spinning {
+        transform: rotate(360deg);
+    }
+}
+
+/*
+ * Dark-mode toggle. The icon swap is driven by the same `:has()` selector
+ * as the theme variables - moon when light theme is active (click to go
+ * dark), sun when dark theme is active (click to go light).
+ */
+.theme-toggle-button {
+    &::before {
+        content: "🌙";
+    }
+
+    body:has(#theme-toggle:checked) &::before {
+        content: "☀️";
+    }
+
+    /* Keyboard focus ring on the label (the underlying checkbox is hidden,
+     * so focus has to be styled on the label, not the input). */
+    &:focus-visible,
+    #theme-toggle:focus-visible + * & {
+        outline: 2px solid var(--color-primary);
+        outline-offset: 2px;
+    }
+}

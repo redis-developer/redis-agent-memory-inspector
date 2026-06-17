@@ -105,7 +105,7 @@ let onDeleteCallback = null;
 
 // Cached context (userId + namespace) so the subtitle can re-derive itself
 // when the scope tab changes without the caller having to push context
-// again. `index.js` calls `setContext({ ... })` after every config mutation.
+// again. `inspector.js` calls `setContext({ ... })` after every config mutation.
 let context = { userId: null, namespace: null, hasSession: false };
 
 export function reset() {
@@ -209,7 +209,7 @@ export function setCapabilities({ optimizeQuery }) {
  *   2. Re-derive the subtitle text from the userId / namespace so it
  *      accurately describes what's actually being filtered.
  *
- * Called by index.js after every config mutation (initial connect + every
+ * Called by inspector.js after every config mutation (initial connect + every
  * picker-pill change).
  */
 export function setContext({ userId, namespace, hasSession }) {
@@ -311,7 +311,7 @@ export function render(memories) {
  * Clone the longterm-card template and fill its slots from a single
  * memory record. The template's structure (meta row, type badge,
  * timestamp, session, id, score, delete button, body text) is in
- * index.html; this function only handles data binding + visibility +
+ * inspector.html; this function only handles data binding + visibility +
  * the delete handler that needs the memory.id closure.
  */
 function buildCard(memory) {

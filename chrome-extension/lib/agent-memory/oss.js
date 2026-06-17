@@ -115,7 +115,7 @@ export function createOssClient(config) {
         if (!res.ok) throw new Error(`search failed (${res.status})`);
         const data = await res.json();
         // Preserve LTM-scan order so the first user/namespace in the list is
-        // the most recently active. The auto-pick in index.js relies on this.
+        // the most recently active. The auto-pick in inspector.js relies on this.
         const users = [
             ...new Set(data.memories.map((m) => m.user_id).filter(Boolean)),
         ];

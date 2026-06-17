@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Configure - Redis Agent Memory Inspector</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            rel="stylesheet"
+            href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap"
+        />
+        <link rel="stylesheet" href="styles/global.css" />
+        <link rel="stylesheet" href="styles/config.css" />
+    </head>
+    <body>
+        <!--
+            Dark-mode toggle. The hidden checkbox controls the theme via
+            `body:has(#theme-toggle:checked) { ... }` overrides in
+            global.css. No JS. The label below is the visible button users
+            click.
+        -->
+        <input
+            type="checkbox"
+            id="theme-toggle"
+            class="visually-hidden"
+            aria-label="Toggle dark mode"
+        />
+
+        <header class="app-header">
+            <div class="app-title">
+                <img
+                    class="app-icon"
+                    src="icons/icon.svg"
+                    alt=""
+                    aria-hidden="true"
+                />
+                <h1>Redis Agent Memory Inspector</h1>
+            </div>
+            <div class="header-right">
+                <label
+                    for="theme-toggle"
+                    class="icon-button theme-toggle-button"
+                    title="Toggle dark mode"
+                    aria-label="Toggle dark mode"
+                    tabindex="0"
+                ></label>
+            </div>
+        </header>
+
+        <section id="connect-panel" class="connect-panel">
+            <div class="connect-intro">
+                <p>
+                    <a
+                        href="https://redis.io/agent-memory/"
+                        target="_blank"
+                        rel="noopener"
+                    ><strong>Redis Agent Memory</strong></a>
+                    gives AI agents short-term memory for the active
+                    session, plus persistent long-term memory across
+                    sessions.
+                </p>
+                <p>
+                    Use <strong>Redis Agent Memory Inspector</strong> to
+                    watch your agent's working memory in real time,
+                    inspect extracted facts, and debug what gets stored
+                    in long-term memory.
+                </p>
+            </div>
+            <form id="connect-form" class="connect-card" novalidate>
+                <fieldset class="field">
+                    <legend class="field-label">Backend</legend>
+                    <div class="backend-options">
+                        <label class="backend-option">
+                            <input
+                                type="radio"
+                                name="config-backend"
+                                value="oss"
+                                checked
+                            />
+                            <span>OSS server</span>
+                        </label>
+                        <label class="backend-option">
+                            <input
+                                type="radio"
+                                name="config-backend"
+                                value="cloud"
+                            />
+                            <span>Redis Cloud</span>
+                        </label>
+                    </div>
+                </fieldset>
+
+                <!--
+                    Saved connections dropdown, filtered to entries
+                    matching the selected backend. Picking an option
+                    fills the form below; the × removes the
+                    currently-selected entry from chrome.storage.session.
+                    Hidden when there are no entries for the active
+                    backend.
+                -->
+                <div id="saved-connections" class="field saved-connections" hidden>
+                    <label class="field-label" for="saved-connections-select">
+                        Saved connection
+                    </label>
+                    <div class="saved-connections-row">
+                        <select
+                            id="saved-connections-select"
+                            class="saved-connections-select"
+                        ></select>
+                        <button
+                            type="button"
+                            id="saved-connections-forget"
+                            class="saved-connections-forget"
+                            title="Forget the selected connection"
+                            aria-label="Forget the selected connection"
+                        >×</button>
+                    </div>
+                </div>
+
+                <label class="field oss-only" id="field-url-oss">
+                    <span class="field-label">Redis Agent Memory Server URL</span>
+                    <span class="field-row">
+                        <input
+                            id="config-url-oss"
+                            type="url"
+                            placeholder="http://localhost:8000"
+                            autocomplete="off"
+                            spellcheck="false"
+                        />
+                        <span id="url-health-oss" class="health-badge"></span>
+                    </span>
+                </label>
+
+                <label class="field cloud-only" id="field-url-cloud" hidden>
+                    <span class="field-label">Redis Agent Memory Cloud Endpoint</span>
+                    <span class="field-row">
+                        <input
+                            id="config-url-cloud"
+                            type="url"
+                            placeholder="https://gcp-us-east4.memory.redis.io"
+                            autocomplete="off"
+                            spellcheck="false"
+                        />
+                        <span id="url-health-cloud" class="health-badge"></span>
+                    </span>
+                </label>
+
+                <label class="field cloud-only" id="field-store-id" hidden>
+                    <span class="field-label">Store ID</span>
+                    <input
+                        id="config-store-id"
+                        type="text"
+                        placeholder="cf1dbfd...d5afd0"
+                        autocomplete="off"
+                        spellcheck="false"
+                    />
+                </label>
+
+                <label class="field cloud-only" id="field-api-key" hidden>
+                    <span class="field-label">API Key</span>
+                    <input
+                        id="config-api-key"
+                        type="password"
+                        placeholder="mem1_…"
+                        autocomplete="off"
+                        spellcheck="false"
+                    />
+                </label>
+
+                <label class="field cloud-only" id="field-proxy-url" hidden>
+                    <span class="field-label">
+                        Proxy URL
+                        <span class="field-hint">
+                            optional - only use if you are running the proxy server to route requests to Redis Agent Memory service locally (e.g. http://localhost:8787). Else, leave this blank.
+                        </span>
+                    </span>
+                    <input
+                        id="config-proxy-url"
+                        type="url"
+                        placeholder="leave empty to use the default proxy"
+                        autocomplete="off"
+                        spellcheck="false"
+                    />
+                </label>
+
+                <label class="field">
+                    <span class="field-label">
+                        Working memory refresh
+                        <span class="field-hint">in seconds - how often to re-fetch the live conversation (default: 3)</span>
+                    </span>
+                    <input
+                        id="config-working-refresh"
+                        type="number"
+                        min="1"
+                        max="3600"
+                        step="1"
+                        value="3"
+                    />
+                </label>
+
+                <label class="field">
+                    <span class="field-label">
+                        Long-term memory refresh
+                        <span class="field-hint">in seconds - how often to re-fetch durable memories (default: 5)</span>
+                    </span>
+                    <input
+                        id="config-longterm-refresh"
+                        type="number"
+                        min="1"
+                        max="3600"
+                        step="1"
+                        value="5"
+                    />
+                </label>
+
+                <div class="connect-actions">
+                    <button id="connect-button" class="primary-button" type="submit" disabled>
+                        Connect
+                    </button>
+                </div>
+
+            </form>
+        </section>
+
+        <footer class="app-footer">
+            <output
+                id="status-line"
+                class="status-line"
+                role="status"
+                aria-live="polite"
+            >Ready.</output>
+        </footer>
+
+        <script type="module" src="config.js"></script>
+    </body>
+</html>

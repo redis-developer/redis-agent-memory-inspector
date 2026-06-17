@@ -5,7 +5,7 @@
  * That set drives the "new memory" flash animation - each id flashes once
  * the first time it appears, then is muted on subsequent re-renders.
  *
- * Card structure lives in #working-card-template in index.html (placed right
+ * Card structure lives in #working-card-template in inspector.html (placed right
  * after the #working-list it renders into). Slotting happens via
  * querySelector against the cloned template.
  */
@@ -55,7 +55,7 @@ export function render(workingMemory) {
 
 /**
  * Clone the working-card template and fill its slots from a single
- * message. The template's structure is in index.html; this function is
+ * message. The template's structure is in inspector.html; this function is
  * only responsible for data binding and conditional visibility.
  */
 function buildCard(message) {

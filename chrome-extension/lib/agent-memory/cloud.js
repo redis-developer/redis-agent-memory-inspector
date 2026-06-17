@@ -264,7 +264,7 @@ export function createCloudClient(config) {
         });
         const items = data?.items ?? [];
         // Preserve scan order so the first owner in the list is the most
-        // recently active - auto-pick in index.js relies on this.
+        // recently active - auto-pick in inspector.js relies on this.
         const users = [
             ...new Set(items.map((m) => m.ownerId).filter(Boolean)),
         ];

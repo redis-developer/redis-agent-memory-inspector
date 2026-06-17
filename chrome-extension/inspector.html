@@ -4,26 +4,21 @@
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>Redis Agent Memory Inspector</title>
-        <link
-            rel="preconnect"
-            href="https://fonts.googleapis.com"
-        />
-        <link
-            rel="preconnect"
-            href="https://fonts.gstatic.com"
-            crossorigin
-        />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
         <link
             rel="stylesheet"
             href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap"
         />
-        <link rel="stylesheet" href="index.css" />
+        <link rel="stylesheet" href="styles/global.css" />
+        <link rel="stylesheet" href="styles/inspector.css" />
     </head>
     <body>
         <!--
             Dark-mode toggle. The hidden checkbox controls the theme via
-            `body:has(#theme-toggle:checked) { ... }` overrides in index.css.
-            No JS. The label below is the visible button users click.
+            `body:has(#theme-toggle:checked) { ... }` overrides in
+            global.css. No JS. The label below is the visible button users
+            click.
         -->
         <input
             type="checkbox"
@@ -43,10 +38,10 @@
                 <h1>Redis Agent Memory Inspector</h1>
             </div>
             <div class="header-right">
-                <div id="connection-pills" class="connection-pills" hidden></div>
+                <div id="connection-pills" class="connection-pills"></div>
                 <!--
                     Templates for pills rendered into #connection-pills above.
-                    Cloned + populated in index.js (staticPill / pickerPill).
+                    Cloned + populated in inspector.js (staticPill / pickerPill).
                 -->
                 <template id="static-pill-template">
                     <span class="pill">
@@ -65,11 +60,10 @@
                     class="icon-button"
                     title="Fetch working + long-term memory now"
                     aria-label="Refresh"
-                    hidden
                 >
                     ↻
                 </button>
-                <button id="reconfigure-button" class="link-button" hidden>
+                <button id="reconfigure-button" class="link-button">
                     Reconfigure
                 </button>
                 <label
@@ -82,143 +76,7 @@
             </div>
         </header>
 
-        <!-- Connect panel: shown when no config is available. -->
-        <section id="connect-panel" class="connect-panel" hidden>
-            <div class="connect-intro">
-                <p>
-                    <a
-                        href="https://redis.io/agent-memory/"
-                        target="_blank"
-                        rel="noopener"
-                    ><strong>Redis Agent Memory</strong></a>
-                    gives AI agents short-term memory for the active
-                    session, plus persistent long-term memory across
-                    sessions.
-                </p>
-                <p>
-                    Use <strong>Redis Agent Memory Inspector</strong> to
-                    watch your agent's working memory in real time,
-                    inspect extracted facts, and debug what gets stored
-                    in long-term memory.
-                </p>
-            </div>
-            <div class="connect-card">
-                <div class="field">
-                    <span class="field-label">Backend</span>
-                    <div class="backend-options">
-                        <label class="backend-option">
-                            <input
-                                type="radio"
-                                name="config-backend"
-                                value="oss"
-                                checked
-                            />
-                            <span>OSS server</span>
-                        </label>
-                        <label class="backend-option">
-                            <input
-                                type="radio"
-                                name="config-backend"
-                                value="cloud"
-                            />
-                            <span>Redis Cloud</span>
-                        </label>
-                    </div>
-                </div>
-
-                <label class="field">
-                    <span class="field-label">Redis Agent Memory Server URL / Endpoint</span>
-                    <span class="field-row">
-                        <input
-                            id="config-url"
-                            type="url"
-                            placeholder="http://localhost:8000"
-                            autocomplete="off"
-                            spellcheck="false"
-                        />
-                        <span id="url-health" class="health-badge"></span>
-                    </span>
-                </label>
-
-                <label class="field cloud-only" id="field-store-id" hidden>
-                    <span class="field-label">Store ID</span>
-                    <input
-                        id="config-store-id"
-                        type="text"
-                        placeholder="cf1dbfd...d5afd0"
-                        autocomplete="off"
-                        spellcheck="false"
-                    />
-                </label>
-
-                <label class="field cloud-only" id="field-api-key" hidden>
-                    <span class="field-label">API Key</span>
-                    <input
-                        id="config-api-key"
-                        type="password"
-                        placeholder="mem1_…"
-                        autocomplete="off"
-                        spellcheck="false"
-                    />
-                </label>
-
-                <label class="field cloud-only" id="field-proxy-url" hidden>
-                    <span class="field-label">
-                        Proxy URL
-                        <span class="field-hint">
-                            optional - only use if you are running the proxy server to route requests to Redis Agent Memory service locally (e.g. http://localhost:8787). Else, leave this blank.
-                        </span>
-                    </span>
-                    <input
-                        id="config-proxy-url"
-                        type="url"
-                        placeholder="leave empty to use the default proxy"
-                        autocomplete="off"
-                        spellcheck="false"
-                    />
-                </label>
-
-                <label class="field">
-                    <span class="field-label">
-                        Working memory refresh
-                        <span class="field-hint">in seconds - how often to re-fetch the live conversation (default: 3)</span>
-                    </span>
-                    <input
-                        id="config-working-refresh"
-                        type="number"
-                        min="1"
-                        max="3600"
-                        step="1"
-                        value="3"
-                    />
-                </label>
-
-                <label class="field">
-                    <span class="field-label">
-                        Long-term memory refresh
-                        <span class="field-hint">in seconds - how often to re-fetch durable memories (default: 5)</span>
-                    </span>
-                    <input
-                        id="config-longterm-refresh"
-                        type="number"
-                        min="1"
-                        max="3600"
-                        step="1"
-                        value="5"
-                    />
-                </label>
-
-                <div class="connect-actions">
-                    <button id="connect-button" class="primary-button" type="button" disabled>
-                        Connect
-                    </button>
-                </div>
-
-            </div>
-        </section>
-
-        <!-- Inspector view: shown when connected. -->
-        <main id="inspector-view" class="inspector-view" hidden>
+        <main id="inspector-view" class="inspector-view">
             <section class="pane pane-working">
                 <header class="pane-header">
                     <div class="pane-title">
@@ -417,6 +275,6 @@
             >Ready.</output>
         </footer>
 
-        <script type="module" src="index.js"></script>
+        <script type="module" src="inspector.js"></script>
     </body>
 </html>

@@ -6,7 +6,7 @@ export const $ = (id) => document.getElementById(id);
  * child as a fresh DOM node ready to populate + append.
  *
  * Templates are placed adjacent to (right after) the slot they render
- * into, so a dev reading index.html can see the rendered structure at
+ * into, so a dev reading inspector.html can see the rendered structure at
  * the call site instead of having to trace createElement chains.
  *
  * Fail-loud if the template is missing - a typo'd id should crash
