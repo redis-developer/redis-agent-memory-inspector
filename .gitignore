@@ -2,3 +2,5 @@
 .env
 .vscode/
 node_modules/
+.claude/
+.playwright-cli/

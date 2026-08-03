@@ -219,7 +219,17 @@ export function createCloudClient(config) {
         // Map OSS-shape filter → cloud's nested { filter, filterOp } shape.
         const cloudFilter = {};
         if (userId) cloudFilter.ownerId = { eq: userId };
-        if (filter.sessionId) cloudFilter.sessionId = { eq: filter.sessionId };
+        // Session scoping: single id → eq, several → in (multi-select).
+        const sessionIds = filter.sessionIds ?? [];
+        if (sessionIds.length === 1)
+            cloudFilter.sessionId = { eq: sessionIds[0] };
+        else if (sessionIds.length > 1)
+            cloudFilter.sessionId = { in: sessionIds };
+        const memoryTypes = filter.memoryTypes ?? [];
+        if (memoryTypes.length === 1)
+            cloudFilter.memoryType = { eq: memoryTypes[0] };
+        else if (memoryTypes.length > 1)
+            cloudFilter.memoryType = { in: memoryTypes };
         if (filter.topics?.length) cloudFilter.topics = { in: filter.topics };
         if (filter.entities?.length)
             cloudFilter.entities = { in: filter.entities };

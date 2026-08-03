@@ -11,7 +11,7 @@
  */
 
 import { $, fromTemplate } from "../lib/dom.js";
-import { formatDateTime, relativeTime } from "../lib/format.js";
+import { formatDateTime, pluralize, relativeTime } from "../lib/format.js";
 
 const seenIds = new Set();
 
@@ -27,17 +27,23 @@ export function reset() {
     $("working-stats").textContent = "-";
     $("working-summary").hidden = true;
     $("working-summary-text").textContent = "";
+    setMetaRow(null);
 }
 
 /**
  * Render the pane from a working-memory response. Caller is responsible
  * for fetching `workingMemory` from Redis Agent Memory; this function just paints.
+ * Pass `null` to show the "no session" state while keeping header height.
  */
 export function render(workingMemory) {
+    if (!workingMemory) {
+        reset();
+        $("working-stats").textContent = "no session selected";
+        return;
+    }
+
     const messages = workingMemory.messages ?? [];
-    $("working-stats").textContent = `${messages.length} message${
-        messages.length === 1 ? "" : "s"
-    }`;
+    $("working-stats").textContent = pluralize(messages.length, "message");
 
     const list = $("working-list");
     list.innerHTML = "";
@@ -45,12 +51,52 @@ export function render(workingMemory) {
         list.appendChild(buildCard(message));
     }
 
-    if (workingMemory.summary && typeof workingMemory.summary === "string") {
+    // The OSS server exposes the running summary as `context`; Cloud maps
+    // it to the same field in its client. (There is no top-level `summary`.)
+    const summary = workingMemory.context ?? workingMemory.summary;
+    if (summary && typeof summary === "string") {
         $("working-summary").hidden = false;
-        $("working-summary-text").textContent = workingMemory.summary;
+        $("working-summary-text").textContent = summary;
     } else {
         $("working-summary").hidden = true;
     }
+
+    setMetaRow(workingMemory);
+}
+
+/**
+ * Second header row: created timestamp, TTL, and the icon-only Clear.
+ * `null` hides the values but the row stays (its min-height keeps the
+ * header from shrinking when a scope has no working memory).
+ */
+function setMetaRow(workingMemory) {
+    const createdItem = $("working-created").closest(".pane-meta-item");
+    const ttlItem = $("working-ttl");
+    const clearButton = $("working-clear-button");
+
+    if (!workingMemory) {
+        createdItem.hidden = true;
+        ttlItem.hidden = true;
+        clearButton.hidden = true;
+        return;
+    }
+
+    clearButton.hidden = false;
+
+    if (workingMemory.created_at) {
+        createdItem.hidden = false;
+        const time = $("working-created");
+        time.dateTime = workingMemory.created_at;
+        time.textContent = formatDateTime(workingMemory.created_at);
+        time.title = `created ${relativeTime(workingMemory.created_at)}`;
+    } else {
+        createdItem.hidden = true;
+    }
+
+    const ttl = workingMemory.ttl_seconds;
+    ttlItem.hidden = false;
+    ttlItem.querySelector("code").textContent =
+        typeof ttl === "number" ? `${ttl} s` : "No limit";
 }
 
 /**

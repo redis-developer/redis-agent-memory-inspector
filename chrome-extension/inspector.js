@@ -1,33 +1,45 @@
 /**
  * Inspector entry point - reads the active connection from
- * chrome.storage.session (written by config.js when the user clicks
- * Connect) and runs the poller against it. If storage is empty, bounces
- * back to config.html so the user can re-enter credentials.
+ * chrome.storage.session (written by config.js on Connect) and renders the
+ * workspace against it. If storage is empty, bounces back to config.html.
  *
- * The inspector holds no persistent state across the page itself - all
- * config + saved-connections state lives in chrome.storage.session and
- * is read fresh on load. User + session can be re-picked at any time
- * from the header picker pills without reconnecting.
+ *   Overview          - working memory + latest long-term extractions for
+ *                       the selected user/namespace/session.
+ *   Long-term memory  - full explorer: search, filters, records, summary views.
+ *
+ * No persistent page state - config + saved-connections live in
+ * chrome.storage.session, read fresh on load. Data refreshes on user
+ * action or opt-in per-pane auto-refresh; there is no background polling.
  */
 
 import { $, fromTemplate } from "./lib/dom.js";
 import { createAgentMemoryClient } from "./lib/agent-memory-client.js";
-import { createPoller } from "./lib/polling.js";
+import { createAutoRefresh } from "./lib/auto-refresh.js";
 import { timeStr } from "./lib/format.js";
-import { ensureSummaryViews } from "./lib/summary-views.js";
+import { listSummaryViews, createDefaultViews } from "./lib/summary-views.js";
 import { getActive, clearActive } from "./lib/saved-connections.js";
 import * as workingPanel from "./panels/working-memory-panel.js";
 import * as longTermPanel from "./panels/long-term-memory-panel.js";
+import * as summaryPanel from "./panels/summary-views-panel.js";
 
-// Fallback poll cadences when the config doesn't supply explicit values
-// (the connect form provides them by default, so this rarely fires).
-const WORKING_MEMORY_REFRESH_MS = 3000;
-const LONG_TERM_MEMORY_REFRESH_MS = 5000;
+// A view's async run is polled at most this many times before we stop
+// waiting for its partitions to appear.
+const RUN_VIEW_POLL_ATTEMPTS = 10;
+const RUN_VIEW_POLL_DELAY_MS = 3000;
+// After an added event, extraction runs server-side; refetch at these
+// offsets so the extracted flag + new records surface without polling.
+const EXTRACTION_FOLLOW_UP_DELAYS_MS = [3000, 8000, 15000];
 
 let config = null;
-let poller = null;
 let client = null; // backend-specific Redis Agent Memory client, created on connect
-let summaryViewIds = null; // { userProfileViewId, sessionProfileViewId } | null
+let summaryViews = null; // SummaryView[] | null (null = backend has no support)
+let knownSessions = []; // sessions for the current user/ns scope
+let lastDiscovery = { users: [], namespaces: [] };
+
+// Per-pane auto-refresh controls, created once and reused across connects.
+const refreshers = {};
+
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 document.addEventListener("DOMContentLoaded", async () => {
     const active = await getActive();
@@ -42,38 +54,113 @@ document.addEventListener("DOMContentLoaded", async () => {
     // We subscribe so a filter change triggers a refetch, and we provide a
     // delete handler that calls Redis Agent Memory then refetches.
     longTermPanel.init({
-        onChange: pollLongTerm,
+        onChange: pollRecords,
         onDelete: handleLongTermDelete,
+        onScopeChange: applyFilterChange,
     });
 
+    summaryPanel.init({
+        onCreateDefaults: handleCreateDefaultViews,
+        onRunView: handleRunSummaryView,
+        onDeleteView: handleDeleteSummaryView,
+        onRunPartition: handleSummaryRecompute,
+    });
+
+    initRefreshers();
+    initViewTabs();
+    initAddEventDialog();
+
     $("reconfigure-button").addEventListener("click", async () => {
-        poller?.stop();
         await clearActive();
         window.location.href = "config.html";
     });
-
-    $("refresh-button").addEventListener("click", refreshNow);
 
     // Working-memory clear: session-level deletion. Confirms before firing
     // because the operation is destructive (no soft delete, no undo).
     $("working-clear-button").addEventListener("click", handleWorkingClear);
 
-    // Summary-view refresh: forces Redis Agent Memory to re-run the LLM for
-    // the active scope's partition. Disabled while in flight to prevent
-    // concurrent runs; the spinning class on the icon signals progress.
-    $("ltm-summary-refresh").addEventListener("click", handleSummaryRefresh);
-
     await connect(active);
 });
+
+/**
+ * One auto-refresh control per pane. Each drives only its own fetch; all
+ * default OFF, so nothing polls until the user opts in. Enablement + rate
+ * persist per pane key.
+ */
+function initRefreshers() {
+    refreshers.working = createAutoRefresh({
+        key: "working",
+        refreshLabel: "Refresh working memory",
+        onRefresh: pollWorking,
+    });
+    refreshers.overview = createAutoRefresh({
+        key: "overview",
+        refreshLabel: "Refresh long-term memory",
+        onRefresh: pollOverview,
+    });
+    refreshers.records = createAutoRefresh({
+        key: "records",
+        refreshLabel: "Refresh records",
+        onRefresh: pollRecords,
+    });
+    refreshers.summary = createAutoRefresh({
+        key: "summary",
+        refreshLabel: "Refresh summary views",
+        onRefresh: pollSummaries,
+    });
+    $("working-refresh-slot").appendChild(refreshers.working.element);
+    $("overview-refresh-slot").appendChild(refreshers.overview.element);
+    $("records-refresh-slot").appendChild(refreshers.records.element);
+    $("summary-refresh-slot").appendChild(refreshers.summary.element);
+}
+
+/** Fetch everything once - used on connect and after scope changes. */
+async function refreshAll() {
+    await Promise.all([pollWorking(), pollOverview(), pollRecords()]);
+    await pollSummaries();
+}
+
+// ---------- view tabs (Overview | Long-term memory) ----------
+
+function initViewTabs() {
+    for (const tab of document.querySelectorAll(".view-tab")) {
+        tab.addEventListener("click", () => switchView(tab.dataset.view));
+    }
+    switchView("browse");
+}
+
+/** Show one view, hide the other. */
+function switchView(view) {
+    $("view-browse").hidden = view !== "browse";
+    $("view-ltm").hidden = view !== "ltm";
+    // Scope pickers belong to the Overview; the explorer has its own filters.
+    document.querySelector(".context-bar").hidden = view !== "browse";
+    for (const tab of document.querySelectorAll(".view-tab")) {
+        const isActive = tab.dataset.view === view;
+        tab.classList.toggle("is-active", isActive);
+        tab.setAttribute("aria-selected", String(isActive));
+    }
+}
 
 async function connect(newConfig) {
     config = newConfig;
     client = createAgentMemoryClient(config);
+
+    // Host breadcrumb next to the app title ("Inspector / localhost:8000").
+    const host = $("app-host");
+    host.textContent = new URL(config.url).host;
+    host.hidden = false;
+
     workingPanel.reset();
     longTermPanel.reset();
+    summaryPanel.reset();
     longTermPanel.setCapabilities({
         optimizeQuery: client.longTermMemory.supportsOptimizeQuery,
     });
+
+    // Backends without a working-memory writer (Cloud) don't get the
+    // add-event affordance.
+    $("working-add-button").hidden = !client.workingMemory.put;
 
     // Pick the most recent namespace + user + session before the first poll
     // fires. If discovery finds nothing for any of them, leave that field
@@ -81,24 +168,20 @@ async function connect(newConfig) {
     // or "(none)" filter) until the user picks a value from the pill.
     await autoPickFilters();
     renderConnectionPills();
-    longTermPanel.setContext({
-        userId: config.userId,
-        namespace: config.namespace,
-        hasSession: !!config.sessionId,
-    });
+    pushScopeToPanel();
 
-    // Fire-and-forget the SummaryView bootstrap. Failure leaves
-    // summaryViewIds = null, which the LTM panel reads as "no banners for
-    // this connection" - we don't block polling on it.
-    summaryViewIds = await ensureSummaryViews(client);
+    // List existing summary views (never auto-create - deletes must
+    // stick). null = backend without summary-view support: hide the pane
+    // and let records take the full explorer width.
+    try {
+        summaryViews = await listSummaryViews(client);
+    } catch (err) {
+        summaryViews = [];
+        setStatus(`couldn't list summary views: ${err.message}`);
+    }
+    summaryPanel.setAvailable(summaryViews !== null);
 
-    poller = createPoller({
-        onWorking: pollWorking,
-        onLongTerm: pollLongTerm,
-        workingMs: config.workingMemoryRefreshMs ?? WORKING_MEMORY_REFRESH_MS,
-        longTermMs: config.longTermMemoryRefreshMs ?? LONG_TERM_MEMORY_REFRESH_MS,
-    });
-    poller.start();
+    await refreshAll();
 }
 
 /**
@@ -109,24 +192,41 @@ async function connect(newConfig) {
  */
 async function autoPickFilters() {
     try {
-        const { users, namespaces } = await client.discovery.filters();
-        if (namespaces.length > 0) config.namespace = namespaces[0];
-        if (users.length > 0) config.userId = users[0];
+        lastDiscovery = await client.discovery.filters();
+        if (lastDiscovery.namespaces.length > 0)
+            config.namespace = lastDiscovery.namespaces[0];
+        if (lastDiscovery.users.length > 0)
+            config.userId = lastDiscovery.users[0];
     } catch (err) {
         setStatus(`couldn't discover filters: ${err.message}`);
     }
+    const sessions = await refreshSessionList();
+    if (sessions.length > 0) config.sessionId = sessions[0];
+}
+
+/**
+ * Re-list sessions for the current user/namespace scope and feed the
+ * result into the LTM panel's session multi-select.
+ */
+async function refreshSessionList() {
     try {
-        const sessions = await client.sessions.list(config.userId, config.namespace);
-        if (sessions.length > 0) config.sessionId = sessions[0];
+        knownSessions = await client.sessions.list(
+            config.userId,
+            config.namespace,
+        );
+        longTermPanel.setSessions(knownSessions);
+        return knownSessions;
     } catch (err) {
         setStatus(`couldn't list sessions: ${err.message}`);
+        knownSessions = [];
+        longTermPanel.setSessions([]);
+        return [];
     }
 }
 
 function renderConnectionPills() {
     const pills = $("connection-pills");
     pills.innerHTML = "";
-    pills.appendChild(staticPill("url", new URL(config.url).host));
 
     // Namespace pill - only on backends that support namespaces.
     if (client.supportsNamespaces) {
@@ -174,8 +274,7 @@ function renderConnectionPills() {
  * recent. Changing only the session leaves namespace/user alone.
  *
  * After mutating config we re-render the pills (so the displayed values stay
- * in sync), push the new context into the LTM panel (so the "this session"
- * tab + subtitle reflect what's actually scoped), reset the panes, and
+ * in sync), push the new context into the LTM panel, reset the panes, and
  * trigger a fresh poll.
  */
 async function applyFilterChange({ namespace, userId, sessionId }) {
@@ -186,36 +285,28 @@ async function applyFilterChange({ namespace, userId, sessionId }) {
     if (userId !== undefined) config.userId = userId;
 
     if (changedScopeKey) {
-        try {
-            const sessions = await client.sessions.list(
-                config.userId,
-                config.namespace,
-            );
-            config.sessionId = sessions[0] ?? null;
-        } catch {
-            config.sessionId = null;
-        }
+        const sessions = await refreshSessionList();
+        config.sessionId = sessions[0] ?? null;
     } else if (sessionId !== undefined) {
         config.sessionId = sessionId;
     }
 
     renderConnectionPills();
-    longTermPanel.setContext({
-        userId: config.userId,
-        namespace: config.namespace,
-        hasSession: !!config.sessionId,
-    });
+    pushScopeToPanel();
     workingPanel.reset();
     longTermPanel.reset();
-    await refreshNow();
+    await refreshAll();
 }
 
-/** Read-only pill (url, namespace). Cloned from #static-pill-template. */
-function staticPill(key, value) {
-    const element = fromTemplate("static-pill-template");
-    element.querySelector(".pill-key").textContent = key;
-    element.querySelector(".pill-value").textContent = value;
-    return element;
+/** Mirror the shared scope + discovered options into the LTM panel. */
+function pushScopeToPanel() {
+    longTermPanel.setScopeOptions({
+        users: lastDiscovery.users,
+        namespaces: lastDiscovery.namespaces,
+        userId: config.userId,
+        namespace: config.namespace,
+        supportsNamespaces: client.supportsNamespaces,
+    });
 }
 
 /**
@@ -290,7 +381,12 @@ function makeOption(value, label, selected) {
 }
 
 async function pollWorking() {
-    if (!client || !config?.sessionId) return;
+    if (!client) return;
+    // No session picked - show the empty state but keep the header height.
+    if (!config?.sessionId) {
+        workingPanel.render(null);
+        return;
+    }
     try {
         const workingMemory = await client.workingMemory.get(
             config.sessionId,
@@ -298,107 +394,253 @@ async function pollWorking() {
             config.namespace,
         );
         workingPanel.render(workingMemory);
+        refreshers.working.markRefreshed();
         setStatus(`working memory updated ${timeStr()}`);
     } catch (err) {
         setStatus(`working memory: ${err.message}`);
     }
 }
 
-async function pollLongTerm() {
+/** Overview long-term pane: scoped to the picked session. */
+async function pollOverview() {
     if (!client) return;
     try {
-        // "This session" tab folds session_id into the filter so Redis
-        // Agent Memory scopes the search to memories extracted from the
-        // connected session. "Across sessions" leaves it out, preserving
-        // the existing user-wide view.
-        const scope = longTermPanel.getScope();
-        const baseFilter = longTermPanel.getFilter();
-        const filter =
-            scope === "session" && config.sessionId
-                ? { ...baseFilter, sessionId: config.sessionId }
-                : baseFilter;
-        const data = await client.longTermMemory.search(
-            config.userId,
-            config.namespace,
-            filter,
-        );
-        longTermPanel.render(data.memories ?? []);
-        setStatus(`long-term memory updated ${timeStr()}`);
+        const data = await client.longTermMemory.search(config.userId, config.namespace, {
+            sessionIds: config.sessionId ? [config.sessionId] : [],
+        });
+        longTermPanel.renderOverview(data.memories ?? []);
+        refreshers.overview.markRefreshed();
     } catch (err) {
         setStatus(`long-term memory: ${err.message}`);
     }
-    // Refresh the summary-view banner on the same cadence. Independent
-    // try/catch so a summary-views 404 (Cloud, or AMS too old) doesn't
-    // mask the LTM update above.
-    refreshSummaryBanner().catch((err) =>
-        console.warn("[inspector] summary banner refresh failed:", err.message),
+}
+
+/** Records pane (LTM tab): the explorer's own filter set. */
+async function pollRecords() {
+    if (!client) return;
+    try {
+        const data = await client.longTermMemory.search(
+            config.userId,
+            config.namespace,
+            longTermPanel.getFilter(),
+        );
+        longTermPanel.renderRecords(data.memories ?? []);
+        refreshers.records.markRefreshed();
+        setStatus(`records updated ${timeStr()}`);
+    } catch (err) {
+        setStatus(`records: ${err.message}`);
+    }
+}
+
+async function pollSummaries() {
+    if (!client || summaryViews === null) return;
+    try {
+        summaryViews = (await client.summaryViews.list()) ?? [];
+    } catch (err) {
+        setStatus(`summary views: ${err.message}`);
+        return;
+    }
+
+    // Partition filters must match a view's group_by keys exactly - a
+    // user_id filter on a session-grouped view returns nothing. So user is
+    // pushed server-side only for user-grouped views; session-grouped
+    // partitions are listed unfiltered and scoped client-side to the
+    // user's known sessions.
+    const partitionLists = await Promise.all(
+        summaryViews.map((view) =>
+            client.summaryViews
+                .listPartitions(
+                    view.id,
+                    config.userId && (view.group_by ?? []).includes("user_id")
+                        ? { user_id: config.userId }
+                        : {},
+                )
+                .then((list) => scopePartitions(view, list ?? []))
+                .catch(() => []),
+        ),
+    );
+
+    const partitions = {};
+    summaryViews.forEach((view, i) => {
+        partitions[view.id] = partitionLists[i];
+    });
+
+    summaryPanel.render({ views: summaryViews, partitions });
+    refreshers.summary.markRefreshed();
+    return partitions;
+}
+
+/** Client-side scope for session-grouped views (see pollSummaries). */
+function scopePartitions(view, partitions) {
+    if (!config.userId || !(view.group_by ?? []).includes("session_id")) {
+        return partitions;
+    }
+    return partitions.filter((p) =>
+        knownSessions.includes(p.group?.session_id),
     );
 }
 
-async function handleSummaryRefresh() {
-    if (!client || !summaryViewIds) return;
-    const button = $("ltm-summary-refresh");
-    if (button.disabled) return; // already in flight - prevent concurrent runs
-    const scope = longTermPanel.getScope();
-    const viewId =
-        scope === "session"
-            ? summaryViewIds.sessionProfileViewId
-            : summaryViewIds.userProfileViewId;
-    // The group object must contain exactly the keys the view was created
-    // with - Redis Agent Memory rejects extras with HTTP 400 ("group keys
-    // ... must exactly match view.group_by"). session view is grouped by
-    // session_id only; user view by user_id only.
-    const group =
-        scope === "session"
-            ? { session_id: config.sessionId }
-            : { user_id: config.userId };
+/**
+ * Per-card recompute (runs the LLM synchronously server-side). The group
+ * comes from the card's partition, so it always matches the view's
+ * group_by keys.
+ */
+async function handleSummaryRecompute(viewId, group, button) {
+    if (!client || button.disabled) return;
     button.disabled = true;
     button.classList.add("is-spinning");
     setStatus("recomputing summary…");
     try {
-        const partition = await client.summaryViews.runPartition(viewId, group);
-        longTermPanel.setSummary(partition);
+        await client.summaryViews.runPartition(viewId, group);
         setStatus(`summary recomputed ${timeStr()}`);
+        await pollSummaries();
     } catch (err) {
         setStatus(`summary refresh failed: ${err.message}`);
-    } finally {
         button.disabled = false;
         button.classList.remove("is-spinning");
     }
 }
 
-async function refreshSummaryBanner() {
-    // No summary-view support (Cloud, bootstrap failed) → hide the banner
-    // entirely. Pass `null` to signal "not available."
-    if (!client || !summaryViewIds) {
-        longTermPanel.setSummary(null);
-        return;
+/** Create whichever default views are missing, then refresh the pane. */
+async function handleCreateDefaultViews() {
+    if (!client?.summaryViews) return;
+    setStatus("creating default views…");
+    try {
+        summaryViews = await createDefaultViews(client, summaryViews ?? []);
+        await pollSummaries();
+        setStatus(`default views ready ${timeStr()}`);
+    } catch (err) {
+        setStatus(`create views failed: ${err.message}`);
     }
-    const scope = longTermPanel.getScope();
-    const viewId =
-        scope === "session"
-            ? summaryViewIds.sessionProfileViewId
-            : summaryViewIds.userProfileViewId;
-    // Filter keys have to match the view's group_by exactly - passing
-    // extra keys (e.g. user_id on a session-grouped view) returns zero
-    // partitions instead of the relevant one.
-    const filters =
-        scope === "session"
-            ? { session_id: config.sessionId }
-            : { user_id: config.userId };
-    const partitions = await client.summaryViews.listPartitions(viewId, filters);
-    // Empty array → pass `{}` so the banner shows the empty-state copy
-    // and keeps the ↻ refresh button reachable. Populated → pass the
-    // partition itself.
-    longTermPanel.setSummary(partitions?.[0] ?? {});
 }
 
-async function refreshNow() {
-    if (!config) return;
-    const button = $("refresh-button");
-    button.classList.add("is-spinning");
-    setTimeout(() => button.classList.remove("is-spinning"), 400);
-    await poller?.runNow();
+async function handleDeleteSummaryView(viewId) {
+    if (!client?.summaryViews) return;
+    try {
+        await client.summaryViews.delete(viewId);
+        setStatus("summary view deleted");
+        await pollSummaries();
+    } catch (err) {
+        setStatus(`delete view failed: ${err.message}`);
+    }
+}
+
+/**
+ * Recompute ALL partitions of a view. The server runs it as an async
+ * background task, so keep refetching (bounded) until its partitions
+ * appear; the generate control stays disabled meanwhile.
+ */
+async function handleRunSummaryView(viewId) {
+    if (!client?.summaryViews) return;
+    summaryPanel.setRunning(viewId, true);
+    await pollSummaries(); // repaint to disable the control
+    setStatus("computing summaries…");
+    try {
+        await client.summaryViews.run(viewId);
+        for (let attempt = 0; attempt < RUN_VIEW_POLL_ATTEMPTS; attempt += 1) {
+            await delay(RUN_VIEW_POLL_DELAY_MS);
+            const partitions = await pollSummaries();
+            if ((partitions?.[viewId] ?? []).length) break;
+        }
+        setStatus(`summaries computed ${timeStr()}`);
+    } catch (err) {
+        setStatus(`compute failed: ${err.message}`);
+    } finally {
+        summaryPanel.setRunning(viewId, false);
+        await pollSummaries();
+    }
+}
+
+// ---------- add session event ----------
+
+function initAddEventDialog() {
+    const dialog = $("add-event-dialog");
+
+    $("working-add-button").addEventListener("click", () => {
+        $("add-event-session").value = config?.sessionId ?? "";
+        $("add-event-content").value = "";
+        dialog.showModal();
+        $("add-event-content").focus();
+    });
+
+    $("add-event-cancel").addEventListener("click", () => dialog.close());
+
+    $("add-event-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const sessionId = $("add-event-session").value.trim();
+        const role = $("add-event-role").value;
+        const content = $("add-event-content").value.trim();
+        if (!sessionId || !content) return;
+        try {
+            await appendSessionEvent(sessionId, role, content);
+            dialog.close();
+        } catch (err) {
+            setStatus(`add event failed: ${err.message}`);
+        }
+    });
+}
+
+/**
+ * Append one message to a session's working memory via read-modify-write
+ * (Redis Agent Memory's PUT replaces the whole working-memory record).
+ * Works for brand-new session ids too - a missing session reads as empty
+ * and the PUT creates it.
+ */
+async function appendSessionEvent(sessionId, role, content) {
+    let current = {};
+    try {
+        current = await client.workingMemory.get(
+            sessionId,
+            config.userId,
+            config.namespace,
+        );
+    } catch {
+        // No working memory yet for this session id - start fresh.
+    }
+
+    const messages = [...(current.messages ?? []), { role, content }];
+    await client.workingMemory.put(sessionId, {
+        session_id: sessionId,
+        user_id: current.user_id ?? config.userId ?? null,
+        namespace: current.namespace ?? config.namespace ?? null,
+        context: current.context ?? null,
+        data: current.data ?? {},
+        memories: current.memories ?? [],
+        messages,
+    });
+
+    setStatus(`event added to ${sessionId}`);
+
+    // A new session id becomes the connected session so the working pane
+    // shows what was just written.
+    if (config.sessionId !== sessionId) {
+        config.sessionId = sessionId;
+        await refreshSessionList();
+        renderConnectionPills();
+        workingPanel.reset();
+    }
+    await pollWorking();
+    // Long-term extraction runs async server-side - a few detached
+    // refetches surface the extracted flag and new records without holding
+    // the submit open.
+    followUpAfterExtraction();
+}
+
+/**
+ * Detached refetches of working + overview long-term memory after an added
+ * event, so the extraction flag flips and new records appear on their own.
+ * Not awaited - the dialog's submit must not hang on these.
+ */
+function followUpAfterExtraction() {
+    const startSession = config.sessionId;
+    for (const wait of EXTRACTION_FOLLOW_UP_DELAYS_MS) {
+        setTimeout(() => {
+            // Bail if the user navigated to another session meanwhile.
+            if (config.sessionId !== startSession) return;
+            pollWorking();
+            pollOverview();
+        }, wait);
+    }
 }
 
 async function handleWorkingClear() {
@@ -426,7 +668,7 @@ async function handleLongTermDelete(memoryId) {
     try {
         await client.longTermMemory.delete([memoryId]);
         setStatus(`deleted memory ${memoryId.slice(0, 12)}…`);
-        await pollLongTerm();
+        await Promise.all([pollRecords(), pollOverview()]);
     } catch (err) {
         setStatus(`delete failed: ${err.message}`);
     }

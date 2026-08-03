@@ -14,12 +14,7 @@
         <link rel="stylesheet" href="styles/inspector.css" />
     </head>
     <body>
-        <!--
-            Dark-mode toggle. The hidden checkbox controls the theme via
-            `body:has(#theme-toggle:checked) { ... }` overrides in
-            global.css. No JS. The label below is the visible button users
-            click.
-        -->
+        <!-- CSS-only theme toggle: `body:has(#theme-toggle:checked)` drives the overrides in global.css. -->
         <input
             type="checkbox"
             id="theme-toggle"
@@ -36,35 +31,11 @@
                     aria-hidden="true"
                 />
                 <h1>Redis Agent Memory Inspector</h1>
+                <span id="app-host" class="app-host" hidden></span>
             </div>
             <div class="header-right">
-                <div id="connection-pills" class="connection-pills"></div>
-                <!--
-                    Templates for pills rendered into #connection-pills above.
-                    Cloned + populated in inspector.js (staticPill / pickerPill).
-                -->
-                <template id="static-pill-template">
-                    <span class="pill">
-                        <span class="pill-key"></span>
-                        <span class="pill-value"></span>
-                    </span>
-                </template>
-                <template id="picker-pill-template">
-                    <label class="pill pill-picker">
-                        <span class="pill-key"></span>
-                        <select class="pill-select"></select>
-                    </label>
-                </template>
-                <button
-                    id="refresh-button"
-                    class="icon-button"
-                    title="Fetch working + long-term memory now"
-                    aria-label="Refresh"
-                >
-                    ↻
-                </button>
                 <button id="reconfigure-button" class="link-button">
-                    Reconfigure
+                    Configuration
                 </button>
                 <label
                     for="theme-toggle"
@@ -76,30 +47,83 @@
             </div>
         </header>
 
-        <main id="inspector-view" class="inspector-view">
+        <nav class="view-tabs" role="tablist" aria-label="Inspector views">
+            <button
+                type="button"
+                id="view-tab-browse"
+                class="view-tab is-active"
+                role="tab"
+                aria-selected="true"
+                aria-controls="view-browse"
+                data-view="browse"
+            >
+                Overview
+            </button>
+            <button
+                type="button"
+                id="view-tab-ltm"
+                class="view-tab"
+                role="tab"
+                aria-selected="false"
+                aria-controls="view-ltm"
+                data-view="ltm"
+            >
+                Long-term memory
+            </button>
+        </nav>
+
+        <div class="context-bar">
+            <div id="connection-pills" class="connection-pills"></div>
+            <template id="picker-pill-template">
+                <label class="pill pill-picker">
+                    <span class="pill-key"></span>
+                    <select class="pill-select"></select>
+                </label>
+            </template>
+        </div>
+
+        <main
+            id="view-browse"
+            class="inspector-view"
+            role="tabpanel"
+            aria-labelledby="view-tab-browse"
+        >
             <section class="pane pane-working">
-                <header class="pane-header">
-                    <div class="pane-title">
-                        <h2>Working memory</h2>
-                        <span class="pane-subtitle">this session only</span>
+                <header class="pane-header-block">
+                    <div class="pane-header">
+                        <div class="pane-title">
+                            <h2>Working memory</h2>
+                            <span id="working-stats" class="pane-stats">-</span>
+                        </div>
+                        <div class="pane-header-right">
+                            <button
+                                id="working-add-button"
+                                class="pane-action-button"
+                                type="button"
+                                title="Append a message to this session's working memory"
+                            >＋ Add event</button>
+                            <div id="working-refresh-slot" class="pane-refresh-slot"></div>
+                        </div>
                     </div>
-                    <div class="pane-header-right">
-                        <span id="working-stats" class="pane-stats">-</span>
-                        <button
-                            id="working-clear-button"
-                            class="pane-danger-button"
-                            type="button"
-                            title="Delete all messages in this session"
-                            aria-label="Clear working memory"
-                        >Clear</button>
+                    <div id="working-meta" class="pane-meta-row">
+                        <span class="pane-meta-item" hidden>
+                            <time id="working-created"></time>
+                        </span>
+                        <span id="working-ttl" class="pane-meta-item" hidden>
+                            TTL: <code></code>
+                        </span>
+                        <span class="pane-meta-actions">
+                            <button
+                                id="working-clear-button"
+                                class="pane-danger-button"
+                                type="button"
+                                title="Delete working memory for this scope"
+                                hidden
+                            >Clear</button>
+                        </span>
                     </div>
                 </header>
                 <ul id="working-list" class="card-list" role="list"></ul>
-                <!--
-                    Template for each message card rendered into the
-                    working-list above. Populated in
-                    working-memory-panel.js render().
-                -->
                 <template id="working-card-template">
                     <li>
                         <article class="card">
@@ -122,73 +146,63 @@
                 </section>
             </section>
 
+            <!-- Compact latest extractions for the selected scope. -->
             <section class="pane pane-longterm">
-                <header class="pane-header">
-                    <div class="pane-title">
-                        <h2>Long-term memory</h2>
-                        <span id="longterm-subtitle" class="pane-subtitle">
-                            across all sessions for this user
+                <header class="pane-header-block">
+                    <div class="pane-header">
+                        <div class="pane-title">
+                            <h2>Long-term memory</h2>
+                            <span id="browse-longterm-stats" class="pane-stats">-</span>
+                        </div>
+                        <div class="pane-header-right">
+                            <div id="overview-refresh-slot" class="pane-refresh-slot"></div>
+                        </div>
+                    </div>
+                    <div class="pane-meta-row">
+                        <span class="pane-meta-item">
+                            <time id="overview-latest" hidden></time>
                         </span>
                     </div>
-                    <span id="longterm-stats" class="pane-stats">-</span>
                 </header>
-                <div
-                    class="pane-tabs"
-                    role="tablist"
-                    aria-label="Long-term memory scope"
-                >
-                    <button
-                        type="button"
-                        class="pane-tab"
-                        role="tab"
-                        aria-selected="false"
-                        data-scope="session"
-                    >
-                        This session
-                    </button>
-                    <button
-                        type="button"
-                        class="pane-tab is-active"
-                        role="tab"
-                        aria-selected="true"
-                        data-scope="all"
-                    >
-                        Across sessions
-                    </button>
-                </div>
-                <div
-                    id="ltm-summary-banner"
-                    class="summary-banner"
-                    hidden
-                >
-                    <div
-                        id="ltm-summary-text"
-                        class="summary-banner-text"
-                    ></div>
-                    <div class="summary-banner-footer">
-                        <button
-                            type="button"
-                            id="ltm-summary-toggle"
-                            class="summary-banner-toggle"
-                            hidden
-                        >
-                            Show more
-                        </button>
-                        <div
-                            id="ltm-summary-meta"
-                            class="summary-banner-meta"
-                        ></div>
-                        <button
-                            type="button"
-                            id="ltm-summary-refresh"
-                            class="summary-banner-refresh"
-                            title="Recompute summary now (runs the LLM)"
-                            aria-label="Refresh summary"
-                        >
-                            ↻
-                        </button>
+                <ul id="browse-longterm-list" class="card-list" role="list"></ul>
+                <template id="browse-card-template">
+                    <li>
+                        <article class="card card-compact">
+                            <div class="card-meta">
+                                <span class="type-badge"></span>
+                                <time hidden></time>
+                            </div>
+                            <p class="card-text"></p>
+                            <button
+                                type="button"
+                                class="summary-banner-toggle card-toggle"
+                                hidden
+                            >Show more</button>
+                        </article>
+                    </li>
+                </template>
+            </section>
+        </main>
+
+        <main
+            id="view-ltm"
+            class="inspector-view"
+            role="tabpanel"
+            aria-labelledby="view-tab-ltm"
+            hidden
+        >
+            <section class="pane pane-longterm">
+                <header class="pane-header-block">
+                    <div class="pane-header">
+                        <div class="pane-title">
+                            <h2>Memory records</h2>
+                            <span id="longterm-stats" class="pane-stats">-</span>
+                        </div>
+                        <div class="pane-header-right">
+                            <div id="records-refresh-slot" class="pane-refresh-slot"></div>
+                        </div>
                     </div>
-                </div>
+                </header>
                 <div class="pane-toolbar">
                     <div class="search-row">
                         <input
@@ -207,12 +221,8 @@
                             <span>optimize</span>
                         </label>
                     </div>
+                    <div id="ltm-filter-row" class="filter-row"></div>
                     <div id="ltm-active-filters" class="active-filters"></div>
-                    <!--
-                        Template for active-filter pills rendered into
-                        #ltm-active-filters above. Cloned per active filter
-                        in long-term-memory-panel.js renderActiveFilters().
-                    -->
                     <template id="filter-pill-template">
                         <span class="filter-pill">
                             <span class="filter-pill-key"></span>
@@ -226,31 +236,32 @@
                     </template>
                 </div>
                 <ul id="longterm-list" class="card-list" role="list"></ul>
-                <!--
-                    Templates for cards + chip rows + chips rendered into
-                    the longterm-list above. Populated in
-                    long-term-memory-panel.js render() / renderChipRow().
-                -->
                 <template id="longterm-card-template">
                     <li>
-                        <article class="card">
+                        <article class="card hover-copy-host">
                             <div class="card-meta">
                                 <span class="type-badge"></span>
                                 <time hidden></time>
-                                <span class="card-meta-session" hidden>
-                                    from session: <code></code>
+                                <span class="card-id" hidden>
+                                    <span class="card-id-copy"></span>
+                                    <span class="card-id-text"></span>
                                 </span>
-                                <span class="card-id" hidden></span>
                                 <span class="score-badge" hidden></span>
+                            </div>
+                            <p class="card-text"></p>
+                            <footer class="card-footer">
+                                <span class="card-meta-session" hidden>
+                                    <code></code>
+                                    <span class="card-session-copy"></span>
+                                </span>
                                 <button
                                     type="button"
                                     class="card-delete-button"
-                                    title="Delete this memory"
-                                    aria-label="Delete memory"
+                                    title="Clear this memory"
+                                    aria-label="Clear this memory"
                                     hidden
-                                >✕</button>
-                            </div>
-                            <p class="card-text"></p>
+                                >Clear</button>
+                            </footer>
                         </article>
                     </li>
                 </template>
@@ -264,7 +275,146 @@
                     <button type="button" class="chip"></button>
                 </template>
             </section>
+
+            <!-- One collapsible section per view, each holding its computed partition cards. -->
+            <section id="summary-pane" class="pane pane-summaries">
+                <header class="pane-header-block">
+                    <div class="pane-header">
+                        <div class="pane-title">
+                            <h2>Summary views</h2>
+                        </div>
+                        <div class="pane-header-right">
+                            <button
+                                id="summary-create-defaults"
+                                class="pane-action-button"
+                                type="button"
+                                title="Create the default user and session summary views"
+                                hidden
+                            >＋ Default views</button>
+                            <div id="summary-refresh-slot" class="pane-refresh-slot"></div>
+                        </div>
+                    </div>
+                </header>
+                <div id="summary-views-list" class="summary-views-list"></div>
+
+                <template id="summary-empty-template">
+                    <div class="summary-empty-state">
+                        <p class="summary-empty">No summary views configured.</p>
+                        <button
+                            type="button"
+                            class="pane-action-button summary-empty-create"
+                        >Create default views</button>
+                    </div>
+                </template>
+
+                <template id="summary-section-template">
+                    <details class="summary-view-section">
+                        <summary class="summary-view-summary">
+                            <span class="summary-view-chevron" aria-hidden="true">▾</span>
+                            <span class="summary-view-name"></span>
+                            <span class="summary-view-count"></span>
+                        </summary>
+                        <div class="summary-view-controls">
+                            <span class="summary-view-badge"></span>
+                            <button
+                                type="button"
+                                class="summary-view-generate icon-button"
+                                title="Compute all summaries for this view"
+                                aria-label="Compute summaries for this view"
+                            >↻</button>
+                            <button
+                                type="button"
+                                class="summary-view-delete pane-danger-button"
+                                title="Clear this summary view"
+                            >Clear</button>
+                        </div>
+                        <ul class="card-list summary-card-list" role="list"></ul>
+                    </details>
+                </template>
+
+                <template id="summary-card-template">
+                    <li>
+                        <article class="card summary-card hover-copy-host">
+                            <div class="card-meta">
+                                <span class="summary-scope-badge"></span>
+                                <time hidden></time>
+                                <span class="summary-card-count"></span>
+                            </div>
+                            <div class="summary-banner-text"></div>
+                            <button
+                                type="button"
+                                class="summary-banner-toggle"
+                                hidden
+                            >Show more</button>
+                            <div class="summary-card-footer">
+                                <span class="summary-group-wrap">
+                                    <code class="summary-group" hidden></code>
+                                    <span class="summary-group-copy"></span>
+                                </span>
+                                <button
+                                    type="button"
+                                    class="summary-banner-refresh icon-button"
+                                    title="Recompute this summary now (runs the LLM)"
+                                    aria-label="Recompute summary"
+                                >↻</button>
+                            </div>
+                        </article>
+                    </li>
+                </template>
+            </section>
         </main>
+
+        <dialog id="add-event-dialog" class="add-event-dialog">
+            <form id="add-event-form" method="dialog">
+                <h2>Add session event</h2>
+                <p class="add-event-hint">
+                    Appends a message to the session's working memory - the
+                    server picks it up for long-term extraction like any
+                    agent-written message.
+                </p>
+                <label class="add-event-field">
+                    <span>Session</span>
+                    <input
+                        id="add-event-session"
+                        type="text"
+                        autocomplete="off"
+                        spellcheck="false"
+                        placeholder="session id (new or existing)"
+                        required
+                    />
+                </label>
+                <label class="add-event-field">
+                    <span>Role</span>
+                    <select id="add-event-role">
+                        <option value="user" selected>user</option>
+                        <option value="assistant">assistant</option>
+                        <option value="system">system</option>
+                        <option value="tool">tool</option>
+                    </select>
+                </label>
+                <label class="add-event-field">
+                    <span>Content</span>
+                    <textarea
+                        id="add-event-content"
+                        rows="4"
+                        required
+                        placeholder="Message content…"
+                    ></textarea>
+                </label>
+                <div class="add-event-actions">
+                    <button
+                        type="button"
+                        id="add-event-cancel"
+                        class="link-button"
+                    >Cancel</button>
+                    <button
+                        type="submit"
+                        id="add-event-submit"
+                        class="pane-action-button"
+                    >Add event</button>
+                </div>
+            </form>
+        </dialog>
 
         <footer class="app-footer">
             <output

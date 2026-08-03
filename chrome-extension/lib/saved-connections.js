@@ -21,6 +21,29 @@ const STORAGE_KEY = "savedConnections";
 const ACTIVE_KEY = "activeConnection";
 
 /**
+ * chrome.storage.session inside the extension; a localStorage-backed
+ * stand-in when the page is opened outside Chrome's extension runtime
+ * (local development against a static server).
+ */
+const store =
+    typeof chrome !== "undefined" && chrome.storage?.session
+        ? chrome.storage.session
+        : {
+              async get(key) {
+                  const raw = localStorage.getItem(key);
+                  return { [key]: raw ? JSON.parse(raw) : undefined };
+              },
+              async set(items) {
+                  for (const [key, value] of Object.entries(items)) {
+                      localStorage.setItem(key, JSON.stringify(value));
+                  }
+              },
+              async remove(key) {
+                  localStorage.removeItem(key);
+              },
+          };
+
+/**
  * Compute the human-readable alias for a config. OSS uses the hostname
  * from the URL (with port if present); Cloud uses the storeId since
  * that's what the user named in the Redis Cloud console.
@@ -52,7 +75,7 @@ function newId() {
 
 async function readState() {
     try {
-        const data = await chrome.storage.session.get(STORAGE_KEY);
+        const data = await store.get(STORAGE_KEY);
         const state = data?.[STORAGE_KEY] ?? {};
         return {
             entries: Array.isArray(state.entries) ? state.entries : [],
@@ -66,7 +89,7 @@ async function readState() {
 
 async function writeState(state) {
     try {
-        await chrome.storage.session.set({ [STORAGE_KEY]: state });
+        await store.set({ [STORAGE_KEY]: state });
     } catch (err) {
         console.warn("[saved-connections] write failed:", err.message);
     }
@@ -129,7 +152,7 @@ export async function remove(id) {
  */
 export async function setActive(config) {
     try {
-        await chrome.storage.session.set({ [ACTIVE_KEY]: config });
+        await store.set({ [ACTIVE_KEY]: config });
     } catch (err) {
         console.warn("[saved-connections] setActive failed:", err.message);
     }
@@ -137,7 +160,7 @@ export async function setActive(config) {
 
 export async function getActive() {
     try {
-        const data = await chrome.storage.session.get(ACTIVE_KEY);
+        const data = await store.get(ACTIVE_KEY);
         return data?.[ACTIVE_KEY] ?? null;
     } catch (err) {
         console.warn("[saved-connections] getActive failed:", err.message);
@@ -147,7 +170,7 @@ export async function getActive() {
 
 export async function clearActive() {
     try {
-        await chrome.storage.session.remove(ACTIVE_KEY);
+        await store.remove(ACTIVE_KEY);
     } catch (err) {
         console.warn("[saved-connections] clearActive failed:", err.message);
     }

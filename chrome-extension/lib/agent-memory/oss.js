@@ -26,6 +26,9 @@ const PATHS = {
     ltmSearch: "/v1/long-term-memory/search",
     ltmRoot: "/v1/long-term-memory",
     summaryViews: "/v1/summary-views",
+    summaryView: (viewId) => `/v1/summary-views/${encodeURIComponent(viewId)}`,
+    summaryViewRun: (viewId) =>
+        `/v1/summary-views/${encodeURIComponent(viewId)}/run`,
     summaryViewPartitions: (viewId) =>
         `/v1/summary-views/${encodeURIComponent(viewId)}/partitions`,
     summaryViewPartitionRun: (viewId) =>
@@ -85,9 +88,15 @@ export function createOssClient(config) {
         const body = { text: filter.text ?? "", limit: 50 };
         if (userId) body.user_id = { eq: userId };
         if (namespace) body.namespace = { eq: namespace };
-        if (filter.sessionId) body.session_id = { eq: filter.sessionId };
+        // Session scoping: single id → eq, several → any (multi-select).
+        const sessionIds = filter.sessionIds ?? [];
+        if (sessionIds.length === 1) body.session_id = { eq: sessionIds[0] };
+        else if (sessionIds.length > 1) body.session_id = { any: sessionIds };
         if (filter.topics?.length) body.topics = { any: filter.topics };
         if (filter.entities?.length) body.entities = { any: filter.entities };
+        const memoryTypes = filter.memoryTypes ?? [];
+        if (memoryTypes.length === 1) body.memory_type = { eq: memoryTypes[0] };
+        else if (memoryTypes.length > 1) body.memory_type = { any: memoryTypes };
 
         const qs = filter.optimizeQuery ? "?optimize_query=true" : "";
         const res = await fetch(`${url}${PATHS.ltmSearch}${qs}`, {
@@ -123,6 +132,30 @@ export function createOssClient(config) {
             ...new Set(data.memories.map((m) => m.namespace).filter(Boolean)),
         ];
         return { users, namespaces };
+    }
+
+    /**
+     * Replace a session's working memory. Redis Agent Memory's PUT is a
+     * full-record write (no append endpoint), so callers append by
+     * GET → mutate → PUT. A PUT to an unknown session id creates it.
+     */
+    async function putWorkingMemory(sessionId, workingMemory) {
+        const res = await fetch(`${url}${PATHS.workingMemory(sessionId)}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json", ...authHeaders },
+            body: JSON.stringify(workingMemory),
+        });
+        if (!res.ok) {
+            let detail = res.statusText;
+            try {
+                const body = await res.json();
+                detail = JSON.stringify(body.detail ?? body);
+            } catch {
+                // body wasn't JSON
+            }
+            throw new Error(`put working memory ${res.status} (${detail})`);
+        }
+        return res.json();
     }
 
     async function deleteWorkingMemory(sessionId, userId, namespace) {
@@ -162,6 +195,30 @@ export function createOssClient(config) {
             throw new Error(`create summary view ${res.status} (${detail})`);
         }
         return res.json();
+    }
+
+    // The server keeps already-computed partition summaries in storage;
+    // deleting a view only removes its config, so its results stop being
+    // computed and listed.
+    async function deleteSummaryView(viewId) {
+        const res = await fetch(`${url}${PATHS.summaryView(viewId)}`, {
+            method: "DELETE",
+            headers: authHeaders,
+        });
+        if (!res.ok) throw new Error(`delete summary view ${res.status}`);
+    }
+
+    // Recompute ALL partitions of a view. The server runs it as an async
+    // background task - results land via later partition listings. The
+    // endpoint requires a JSON body (RunSummaryViewRequest); an empty
+    // object is valid and omitting it 422s.
+    async function runSummaryView(viewId) {
+        const res = await fetch(`${url}${PATHS.summaryViewRun(viewId)}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...authHeaders },
+            body: JSON.stringify({}),
+        });
+        if (!res.ok) throw new Error(`run summary view ${res.status}`);
     }
 
     // Force a fresh recompute for one partition. Redis Agent Memory runs the summarization
@@ -223,6 +280,7 @@ export function createOssClient(config) {
         sessions: Object.freeze({ list: listSessions }),
         workingMemory: Object.freeze({
             get: getWorkingMemory,
+            put: putWorkingMemory,
             delete: deleteWorkingMemory,
         }),
         longTermMemory: Object.freeze({
@@ -236,6 +294,8 @@ export function createOssClient(config) {
         summaryViews: Object.freeze({
             list: listSummaryViews,
             create: createSummaryView,
+            delete: deleteSummaryView,
+            run: runSummaryView,
             listPartitions: listSummaryViewPartitions,
             runPartition: runSummaryViewPartition,
         }),

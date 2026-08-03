@@ -153,16 +153,6 @@ export function show({ seed = {}, onConnect }) {
     $("config-store-id").addEventListener("input", onUrlInput);
     $("config-proxy-url").addEventListener("input", onUrlInput);
 
-    // Pre-fill refresh-interval inputs from seed config if it has them. The config
-    // stores intervals in milliseconds; the inputs work in seconds because
-    // that's the unit users think in.
-    if (typeof seed.workingMemoryRefreshMs === "number") {
-        $("config-working-refresh").value = Math.round(seed.workingMemoryRefreshMs / 1000);
-    }
-    if (typeof seed.longTermMemoryRefreshMs === "number") {
-        $("config-longterm-refresh").value = Math.round(seed.longTermMemoryRefreshMs / 1000);
-    }
-
     // Form submit (Enter on any input OR Connect button click) drives the
     // connect flow. preventDefault stops the browser from doing a real
     // GET navigation; we hand off to the parent via onConnect instead.
@@ -219,12 +209,6 @@ function hydrateForm(config) {
             'input[name="config-backend"][value="oss"]',
         ).checked = true;
         $("config-url-oss").value = config.url ?? "";
-    }
-    if (typeof config.workingMemoryRefreshMs === "number") {
-        $("config-working-refresh").value = Math.round(config.workingMemoryRefreshMs / 1000);
-    }
-    if (typeof config.longTermMemoryRefreshMs === "number") {
-        $("config-longterm-refresh").value = Math.round(config.longTermMemoryRefreshMs / 1000);
     }
     applyBackendVisibility();
     updateConnectButton();
@@ -295,13 +279,6 @@ async function renderSavedConnections() {
 }
 
 function readFormConfig() {
-    // Convert seconds → milliseconds. The inputs are typed in seconds (more
-    // natural for the user); the rest of the app works in ms (matches
-    // setInterval / setTimeout). Clamped to a sane minimum so a stray 0 or
-    // negative value doesn't melt the browser.
-    const workingSeconds = Math.max(1, parseInt($("config-working-refresh").value, 10) || 3);
-    const longTermSeconds = Math.max(1, parseInt($("config-longterm-refresh").value, 10) || 5);
-
     const backend = selectedBackend();
     const config = {
         backend,
@@ -313,8 +290,6 @@ function readFormConfig() {
         // Namespace is picked in the inspector view (header pill), not here.
         // Left null until autoPickFilters runs.
         namespace: null,
-        workingMemoryRefreshMs: workingSeconds * 1000,
-        longTermMemoryRefreshMs: longTermSeconds * 1000,
     };
     if (backend === "cloud") {
         config.apiKey = $("config-api-key").value.trim();

@@ -29,3 +29,14 @@ export function relativeTime(iso) {
 export function timeStr() {
     return new Date().toLocaleTimeString([], { hour12: false });
 }
+
+/** "3 records", "1 memory", "2 memories". */
+export function pluralize(count, singular, plural = `${singular}s`) {
+    return `${count} ${count === 1 ? singular : plural}`;
+}
+
+/** `01KTR2ABCDEF...` -> `01KTR2…RGFW6G`; short ids pass through. */
+export function shortId(id) {
+    const s = String(id ?? "");
+    return s.length > 13 ? `${s.slice(0, 6)}…${s.slice(-6)}` : s;
+}

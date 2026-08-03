@@ -155,6 +155,19 @@ body {
     gap: 0.5rem;
 }
 
+/* Host breadcrumb after the title: "… Inspector / localhost:8000" */
+.app-host {
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    color: var(--color-text-secondary);
+}
+
+.app-host::before {
+    content: "/";
+    margin-right: 0.5rem;
+    color: var(--color-text-muted);
+}
+
 .app-icon {
     width: 1.5rem;
     height: 1.5rem;
@@ -214,8 +227,9 @@ body {
     border: 1px solid var(--color-border);
     color: var(--color-text-secondary);
     cursor: pointer;
-    width: 1.75rem;
-    height: 1.75rem;
+    /* smaller box; glyph size stays at font-size below */
+    width: 1.5rem;
+    height: 1.5rem;
     border-radius: var(--border-radius);
     display: inline-flex;
     align-items: center;
