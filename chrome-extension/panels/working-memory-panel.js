@@ -25,8 +25,6 @@ export function reset() {
     seenIds.clear();
     $("working-list").innerHTML = "";
     $("working-stats").textContent = "-";
-    $("working-summary").hidden = true;
-    $("working-summary-text").textContent = "";
     setMetaRow(null);
 }
 
@@ -47,18 +45,14 @@ export function render(workingMemory) {
 
     const list = $("working-list");
     list.innerHTML = "";
+    const summary = summaryFrom(workingMemory);
+    if (summary) {
+        const item = document.createElement("li");
+        item.appendChild(buildSummaryCard(summary));
+        list.appendChild(item);
+    }
     for (const message of messages) {
         list.appendChild(buildCard(message));
-    }
-
-    // The OSS server exposes the running summary as `context`; Cloud maps
-    // it to the same field in its client. (There is no top-level `summary`.)
-    const summary = workingMemory.context ?? workingMemory.summary;
-    if (summary && typeof summary === "string") {
-        $("working-summary").hidden = false;
-        $("working-summary-text").textContent = summary;
-    } else {
-        $("working-summary").hidden = true;
     }
 
     setMetaRow(workingMemory);
@@ -97,6 +91,62 @@ function setMetaRow(workingMemory) {
     ttlItem.hidden = false;
     ttlItem.querySelector("code").textContent =
         typeof ttl === "number" ? `${ttl} s` : "No limit";
+}
+
+/**
+ * Normalize the running summary across backends. OSS exposes it as
+ * `context` (a plain string); Cloud exposes `summary` as a SessionSummary
+ * object ({ text, updatedAt, summarizedEvents, ... }). Returns null when no
+ * summary has been produced yet.
+ */
+function summaryFrom(workingMemory) {
+    const { context, summary } = workingMemory;
+    if (typeof context === "string" && context.trim()) {
+        return { text: context };
+    }
+    if (
+        summary &&
+        typeof summary === "object" &&
+        typeof summary.text === "string" &&
+        summary.text.trim()
+    ) {
+        return {
+            text: summary.text,
+            updatedAt: summary.updatedAt,
+            summarizedEvents: summary.summarizedEvents,
+        };
+    }
+    if (typeof summary === "string" && summary.trim()) {
+        return { text: summary };
+    }
+    return null;
+}
+
+/**
+ * Build the leading summary list item. Shows the summary text and, when the
+ * backend provides them (Cloud), a meta line with the folded-in event count
+ * and last-updated time.
+ */
+function buildSummaryCard(summary) {
+    const node = fromTemplate("working-summary-template");
+    node.querySelector(".summary-text").textContent = summary.text;
+
+    const parts = [];
+    if (typeof summary.summarizedEvents === "number") {
+        parts.push(pluralize(summary.summarizedEvents, "event"));
+    }
+    if (summary.updatedAt) {
+        parts.push(formatDateTime(summary.updatedAt));
+    }
+    if (parts.length) {
+        const metaEl = node.querySelector(".summary-meta");
+        metaEl.hidden = false;
+        metaEl.textContent = parts.join(" · ");
+        if (summary.updatedAt) {
+            metaEl.title = `updated ${relativeTime(summary.updatedAt)}`;
+        }
+    }
+    return node;
 }
 
 /**

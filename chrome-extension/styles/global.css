@@ -24,6 +24,9 @@
     --color-role-accent: #0a6e9c;
     --color-role-accent-bg: rgba(127, 219, 254, 0.18);
 
+    /* RedisInsight "Hash" key-type badge color (dark variant) */
+    --color-type-hash: #364cff;
+
     --border-radius: 4px;
     --border-radius-lg: 8px;
 

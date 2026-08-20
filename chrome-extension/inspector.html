@@ -136,14 +136,15 @@
                         </article>
                     </li>
                 </template>
-                <section
-                    id="working-summary"
-                    class="summary-block"
-                    hidden
-                >
-                    <h3>Summary</h3>
-                    <p id="working-summary-text"></p>
-                </section>
+                <template id="working-summary-template">
+                    <article class="card wm-summary-card" data-testid="working-summary">
+                        <div class="card-meta">
+                            <span class="role-tag role-summary">Summary</span>
+                            <span class="summary-meta" hidden></span>
+                        </div>
+                        <p class="card-text summary-text"></p>
+                    </article>
+                </template>
             </section>
 
             <!-- Compact latest extractions for the selected scope. -->

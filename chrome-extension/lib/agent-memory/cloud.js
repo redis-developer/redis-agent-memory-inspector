@@ -167,9 +167,10 @@ export function createCloudClient(config) {
         // A lightweight authenticated call - listing sessions is cheap and
         // confirms auth+host+storeId in one shot. We accept any 2xx as live.
         try {
-            const res = await fetch(`${base}/session-memory?limit=1`, {
-                headers,
-            });
+            const res = await fetch(
+                `${base}/session-memory?limit=1&includeAll=true`,
+                { headers },
+            );
             if (res.ok) return { ok: true };
 
             // Pull whatever body the server sent so the user can see *why*
@@ -196,14 +197,12 @@ export function createCloudClient(config) {
     }
 
     async function listSessions(userId /* , namespace */) {
-        // Cloud session-memory listing doesn't filter by user_id at the
-        // server - we return all sessions and let the caller filter if it
-        // wants. (For most apps, userId is implicit in the store anyway.)
+        // The Data Plane requires exactly one of filterOwnerId / includeAll
+        // (they are mutually exclusive): scope to the owner when a user is
+        // picked, otherwise list every session in the store.
         const data = await request("GET", "/session-memory", {
-            query: { limit: 50 },
+            query: userId ? { filterOwnerId: userId } : { includeAll: true },
         });
-        // Defensive: not strictly needed, but quiet the unused-param lint.
-        void userId;
         return data?.items ?? [];
     }
 
@@ -306,7 +305,7 @@ export function createCloudClient(config) {
 
         // Cross-cutting capability flags
         supportsNamespaces: false,
-        supportsUserIdServerFilter: false,
+        supportsUserIdServerFilter: true,
 
         // Required domains
         health: Object.freeze({ ping: pingHealth }),
