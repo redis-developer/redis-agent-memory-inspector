@@ -105,13 +105,7 @@
                             <div id="working-refresh-slot" class="pane-refresh-slot"></div>
                         </div>
                     </div>
-                    <div id="working-meta" class="pane-meta-row">
-                        <span class="pane-meta-item" hidden>
-                            <time id="working-created"></time>
-                        </span>
-                        <span id="working-ttl" class="pane-meta-item" hidden>
-                            TTL: <code></code>
-                        </span>
+                    <div class="pane-meta-row">
                         <span class="pane-meta-actions">
                             <button
                                 id="working-clear-button"
@@ -130,7 +124,6 @@
                             <div class="card-meta">
                                 <span class="role-tag"></span>
                                 <time hidden></time>
-                                <span class="extracted-flag" hidden></span>
                             </div>
                             <p class="card-text"></p>
                         </article>
@@ -214,13 +207,6 @@
                             autocomplete="off"
                             spellcheck="false"
                         />
-                        <label
-                            class="optimize-toggle"
-                            title="Pre-process the search query with an LLM to expand and refine it before searching."
-                        >
-                            <input id="ltm-optimize" type="checkbox" />
-                            <span>optimize</span>
-                        </label>
                     </div>
                     <div id="ltm-filter-row" class="filter-row"></div>
                     <div id="ltm-active-filters" class="active-filters"></div>
@@ -277,90 +263,29 @@
                 </template>
             </section>
 
-            <!-- One collapsible section per view, each holding its computed partition cards. -->
-            <section id="summary-pane" class="pane pane-summaries">
+            <section class="pane">
                 <header class="pane-header-block">
                     <div class="pane-header">
                         <div class="pane-title">
-                            <h2>Summary views</h2>
-                        </div>
-                        <div class="pane-header-right">
-                            <button
-                                id="summary-create-defaults"
-                                class="pane-action-button"
-                                type="button"
-                                title="Create the default user and session summary views"
-                                hidden
-                            >＋ Default views</button>
-                            <div id="summary-refresh-slot" class="pane-refresh-slot"></div>
+                            <h2>Record details</h2>
                         </div>
                     </div>
                 </header>
-                <div id="summary-views-list" class="summary-views-list"></div>
-
-                <template id="summary-empty-template">
-                    <div class="summary-empty-state">
-                        <p class="summary-empty">No summary views configured.</p>
-                        <button
-                            type="button"
-                            class="pane-action-button summary-empty-create"
-                        >Create default views</button>
+                <div class="record-detail-body">
+                    <p id="record-detail-empty" class="summary-empty">
+                        Select a memory record to see its details.
+                    </p>
+                    <dl
+                        id="record-detail-fields"
+                        class="record-detail-fields"
+                        hidden
+                    ></dl>
+                </div>
+                <template id="record-field-template">
+                    <div class="record-field">
+                        <dt class="record-field-label"></dt>
+                        <dd class="record-field-value"></dd>
                     </div>
-                </template>
-
-                <template id="summary-section-template">
-                    <details class="summary-view-section">
-                        <summary class="summary-view-summary">
-                            <span class="summary-view-chevron" aria-hidden="true">▾</span>
-                            <span class="summary-view-name"></span>
-                            <span class="summary-view-count"></span>
-                        </summary>
-                        <div class="summary-view-controls">
-                            <span class="summary-view-badge"></span>
-                            <button
-                                type="button"
-                                class="summary-view-generate icon-button"
-                                title="Compute all summaries for this view"
-                                aria-label="Compute summaries for this view"
-                            >↻</button>
-                            <button
-                                type="button"
-                                class="summary-view-delete pane-danger-button"
-                                title="Clear this summary view"
-                            >Clear</button>
-                        </div>
-                        <ul class="card-list summary-card-list" role="list"></ul>
-                    </details>
-                </template>
-
-                <template id="summary-card-template">
-                    <li>
-                        <article class="card summary-card hover-copy-host">
-                            <div class="card-meta">
-                                <span class="summary-scope-badge"></span>
-                                <time hidden></time>
-                                <span class="summary-card-count"></span>
-                            </div>
-                            <div class="summary-banner-text"></div>
-                            <button
-                                type="button"
-                                class="summary-banner-toggle"
-                                hidden
-                            >Show more</button>
-                            <div class="summary-card-footer">
-                                <span class="summary-group-wrap">
-                                    <code class="summary-group" hidden></code>
-                                    <span class="summary-group-copy"></span>
-                                </span>
-                                <button
-                                    type="button"
-                                    class="summary-banner-refresh icon-button"
-                                    title="Recompute this summary now (runs the LLM)"
-                                    aria-label="Recompute summary"
-                                >↻</button>
-                            </div>
-                        </article>
-                    </li>
                 </template>
             </section>
         </main>
@@ -390,7 +315,6 @@
                         <option value="user" selected>user</option>
                         <option value="assistant">assistant</option>
                         <option value="system">system</option>
-                        <option value="tool">tool</option>
                     </select>
                 </label>
                 <label class="add-event-field">

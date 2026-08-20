@@ -75,18 +75,18 @@
                             <input
                                 type="radio"
                                 name="config-backend"
-                                value="oss"
+                                value="cloud"
                                 checked
                             />
-                            <span>OSS server</span>
+                            <span>Redis Cloud</span>
                         </label>
                         <label class="backend-option">
                             <input
                                 type="radio"
                                 name="config-backend"
-                                value="cloud"
+                                value="self-managed"
                             />
-                            <span>Redis Cloud</span>
+                            <span>Self-managed</span>
                         </label>
                     </div>
                 </fieldset>
@@ -117,20 +117,6 @@
                         >×</button>
                     </div>
                 </div>
-
-                <label class="field oss-only" id="field-url-oss">
-                    <span class="field-label">Redis Agent Memory Server URL</span>
-                    <span class="field-row">
-                        <input
-                            id="config-url-oss"
-                            type="url"
-                            placeholder="http://localhost:8000"
-                            autocomplete="off"
-                            spellcheck="false"
-                        />
-                        <span id="url-health-oss" class="health-badge"></span>
-                    </span>
-                </label>
 
                 <label class="field cloud-only" id="field-url-cloud" hidden>
                     <span class="field-label">Redis Agent Memory Cloud Endpoint</span>
@@ -179,6 +165,56 @@
                         id="config-proxy-url"
                         type="url"
                         placeholder="leave empty to use the default proxy"
+                        autocomplete="off"
+                        spellcheck="false"
+                    />
+                </label>
+
+                <label class="field selfmanaged-only" id="field-url-selfmanaged" hidden>
+                    <span class="field-label">Data Plane Endpoint</span>
+                    <span class="field-row">
+                        <input
+                            id="config-url-selfmanaged"
+                            type="url"
+                            placeholder="http://localhost:9000"
+                            autocomplete="off"
+                            spellcheck="false"
+                        />
+                        <span id="url-health-selfmanaged" class="health-badge"></span>
+                    </span>
+                </label>
+
+                <label class="field selfmanaged-only" id="field-store-id-selfmanaged" hidden>
+                    <span class="field-label">Store ID</span>
+                    <input
+                        id="config-store-id-selfmanaged"
+                        type="text"
+                        placeholder="inspector-test"
+                        autocomplete="off"
+                        spellcheck="false"
+                    />
+                </label>
+
+                <label class="field selfmanaged-only" id="field-auth-selfmanaged" hidden>
+                    <span class="field-label">Authentication</span>
+                    <select id="config-auth-selfmanaged" class="field-select">
+                        <option value="none" selected>None (auth-disabled store)</option>
+                        <option value="bearer">Agent key (Bearer)</option>
+                        <option value="x-api-key">Agent key (X-Api-Key)</option>
+                    </select>
+                </label>
+
+                <label class="field selfmanaged-only" id="field-credential-selfmanaged" hidden>
+                    <span class="field-label">
+                        Agent key
+                        <span class="field-hint">
+                            required only when authentication is not None; use a read-scoped Agent Memory key.
+                        </span>
+                    </span>
+                    <input
+                        id="config-credential-selfmanaged"
+                        type="password"
+                        placeholder="agent key"
                         autocomplete="off"
                         spellcheck="false"
                     />

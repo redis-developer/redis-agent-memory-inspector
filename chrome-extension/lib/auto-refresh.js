@@ -20,16 +20,15 @@ const store = {
 };
 
 /**
- * Build one control. Returns { element, markRefreshed, setDisabled,
- * destroy }. The caller appends `element` into its pane header and calls
- * `markRefreshed()` after every successful fetch (manual or its own).
+ * Build one control. Returns { element, markRefreshed }. The caller appends
+ * `element` into its pane header and calls `markRefreshed()` after every
+ * successful fetch (manual or its own).
  */
 export function createAutoRefresh({ key, onRefresh, refreshLabel }) {
     let enabled = localStorage.getItem(store.enabled(key)) === "true";
     let rateS = Number(localStorage.getItem(store.rate(key))) || DEFAULT_RATE_S;
     let lastRefreshTime = null;
     let timer = null;
-    let disabled = false;
 
     const root = document.createElement("div");
     root.className = "auto-refresh";
@@ -44,7 +43,6 @@ export function createAutoRefresh({ key, onRefresh, refreshLabel }) {
     refreshButton.title = refreshLabel ?? "Refresh";
     refreshButton.setAttribute("aria-label", refreshLabel ?? "Refresh");
     refreshButton.addEventListener("click", async () => {
-        if (disabled) return;
         refreshButton.classList.add("is-spinning");
         setTimeout(() => refreshButton.classList.remove("is-spinning"), 400);
         await onRefresh();
@@ -122,7 +120,7 @@ export function createAutoRefresh({ key, onRefresh, refreshLabel }) {
     function restartTimer() {
         clearInterval(timer);
         timer = null;
-        if (enabled && !disabled) {
+        if (enabled) {
             timer = setInterval(() => onRefresh(), rateS * 1000);
         }
     }
@@ -133,7 +131,7 @@ export function createAutoRefresh({ key, onRefresh, refreshLabel }) {
             : "Last refresh: -";
     }
 
-    const labelTick = setInterval(renderLabel, LABEL_TICK_MS);
+    setInterval(renderLabel, LABEL_TICK_MS);
     renderLabel();
     restartTimer();
 
@@ -142,16 +140,6 @@ export function createAutoRefresh({ key, onRefresh, refreshLabel }) {
         markRefreshed() {
             lastRefreshTime = new Date().toISOString();
             renderLabel();
-        },
-        setDisabled(value) {
-            disabled = value;
-            refreshButton.disabled = value;
-            restartTimer();
-        },
-        destroy() {
-            clearInterval(timer);
-            clearInterval(labelTick);
-            root.remove();
         },
     };
 }

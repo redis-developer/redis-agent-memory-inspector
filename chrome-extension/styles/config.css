@@ -246,18 +246,6 @@
     margin-top: var(--spacing-md);
 }
 
-.connect-tip {
-    margin: var(--spacing-md) 0 0;
-    font-size: 0.6875rem;
-    color: var(--color-text-muted);
-
-    & code {
-        background: var(--color-bg-tertiary);
-        padding: 1px 4px;
-        border-radius: 3px;
-    }
-}
-
 .primary-button {
     background: var(--color-primary);
     color: white;

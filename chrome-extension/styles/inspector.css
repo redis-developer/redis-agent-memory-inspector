@@ -101,6 +101,9 @@
 /* Text "Delete" matching the pane-danger-button look, but hover-revealed
  * per card so a long list isn't a wall of Delete buttons. */
 .card-delete-button {
+    /* Stay right-aligned even when the session span is absent (a single
+     * flex child under space-between would otherwise fall to the left). */
+    margin-left: auto;
     opacity: 0;
     transition: opacity 120ms ease, background 120ms ease, color 120ms ease,
         border-color 120ms ease;
@@ -273,18 +276,7 @@
     flex-shrink: 0;
 }
 
-/* ---------- summary banner (LTM) ---------- */
-
-.summary-banner-text {
-    color: var(--color-text);
-    white-space: pre-wrap;
-    /* Clamp by default to 4 lines so a long multi-paragraph summary
-     * doesn't dominate the pane. The "Show more" toggle drops the clamp. */
-    display: -webkit-box;
-    -webkit-line-clamp: 4;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-}
+/* ---------- compact-card "show more" toggle ---------- */
 
 .summary-banner-toggle {
     appearance: none;
@@ -298,34 +290,6 @@
 
     &:hover {
         color: var(--color-text);
-    }
-}
-
-.summary-banner-refresh {
-    appearance: none;
-    background: transparent;
-    /* bare icon - no button chrome; keeps the footer close to the
-     * records footer's "Clear" button height */
-    border: none;
-    color: var(--color-text-muted);
-    padding: 0;
-    font-size: 0.95rem;
-    line-height: 1;
-    cursor: pointer;
-    flex-shrink: 0;
-    transition: color 120ms;
-
-    &:hover:not(:disabled) {
-        color: var(--color-text);
-    }
-
-    &:disabled {
-        cursor: wait;
-        opacity: 0.6;
-    }
-
-    &.is-spinning {
-        animation: spin 0.9s linear infinite;
     }
 }
 
@@ -353,31 +317,6 @@
         border-color: var(--color-primary);
         background: var(--color-bg-primary);
         box-shadow: 0 0 0 3px rgba(255, 68, 56, 0.12);
-    }
-}
-
-.optimize-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    padding: 0.3rem 0.5rem;
-    background: var(--color-bg-secondary);
-    border: 1px solid var(--color-border);
-    border-radius: var(--border-radius);
-    font-family: var(--font-mono);
-    font-size: 0.625rem;
-    color: var(--color-text-secondary);
-    cursor: pointer;
-    user-select: none;
-
-    &:hover {
-        border-color: var(--color-border-strong);
-        color: var(--color-text);
-    }
-
-    & input {
-        margin: 0;
-        accent-color: var(--color-primary);
     }
 }
 
@@ -631,16 +570,6 @@
     }
 }
 
-.chip-entity {
-    background: #e8ebec; /* dusk grey */
-    color: #163341; /* dusk */
-
-    body:has(#theme-toggle:checked) & {
-        background: var(--color-bg-tertiary);
-        color: var(--color-text);
-    }
-}
-
 .type-badge {
     font-family: var(--font-mono);
     font-size: 0.625rem;
@@ -672,20 +601,6 @@
     }
 }
 
-.extracted-flag {
-    margin-left: auto;
-    font-family: var(--font-mono);
-    font-size: 0.625rem;
-
-    &.is-extracted {
-        color: var(--color-success);
-    }
-
-    &.is-pending {
-        color: var(--color-text-muted);
-    }
-}
-
 /* ---------- working-memory running-summary card (first list item) ---------- */
 
 .wm-summary-card {
@@ -705,6 +620,69 @@
 .summary-meta {
     font-size: 0.625rem;
     color: var(--color-text-muted);
+}
+
+/* ---------- long-term record detail pane ---------- */
+
+.card.is-selectable {
+    cursor: pointer;
+}
+
+.card.is-selected {
+    border-color: var(--color-role-accent);
+    background: var(--color-role-accent-bg);
+}
+
+.record-detail-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: var(--spacing-xs) var(--spacing-sm);
+}
+
+.record-detail-fields {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+}
+
+.record-field {
+    display: grid;
+    grid-template-columns: 130px 1fr;
+    gap: var(--spacing-sm);
+    align-items: baseline;
+    padding-bottom: var(--spacing-xs);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.record-field-label {
+    margin: 0;
+    font-size: 0.6875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-secondary);
+}
+
+.record-field-value {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--color-text);
+    word-break: break-word;
+    white-space: pre-wrap;
+}
+
+.record-field-value.is-empty {
+    color: var(--color-text-muted);
+}
+
+.record-field-json {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    white-space: pre-wrap;
+    word-break: break-word;
 }
 
 /* ---------- context bar (connection scope pills under the tabs) ---------- */
@@ -729,11 +707,7 @@
     display: none;
 }
 
-.inspector-view-single {
-    grid-template-columns: 1fr;
-}
-
-/* ---------- neutral pane action buttons (Add event / Explore) ---------- */
+/* ---------- neutral pane action button (Add event) ---------- */
 
 .pane-action-button {
     transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
@@ -753,6 +727,71 @@
         border-color: var(--color-role-accent);
         background: var(--color-role-accent-bg);
     }
+}
+
+/* ---------- add session event dialog ---------- */
+
+.add-event-dialog {
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
+    background: var(--color-bg-primary);
+    color: var(--color-text);
+    padding: var(--spacing-md, 1rem);
+    width: min(440px, 92vw);
+
+    &::backdrop {
+        background: rgba(0, 0, 0, 0.35);
+    }
+
+    & h2 {
+        margin: 0 0 0.3rem;
+        font-size: 0.95rem;
+    }
+}
+
+.add-event-hint {
+    margin: 0 0 0.8rem;
+    color: var(--color-text-muted);
+    font-size: 0.78rem;
+    line-height: 1.4;
+}
+
+.add-event-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    margin-bottom: 0.7rem;
+
+    & span {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--color-text-secondary);
+    }
+
+    & input,
+    & select,
+    & textarea {
+        font-family: var(--font-mono);
+        font-size: 0.8rem;
+        color: var(--color-text);
+        background: var(--color-bg-secondary);
+        border: 1px solid var(--color-border);
+        border-radius: var(--border-radius);
+        padding: 0.4rem 0.5rem;
+
+        &:focus-visible {
+            outline: 2px solid var(--color-role-accent);
+            outline-offset: 1px;
+        }
+    }
+}
+
+.add-event-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.6rem;
+    margin-top: 0.4rem;
 }
 
 /* ---------- compact overview cards (Browse tab LTM pane) ---------- */
@@ -884,234 +923,6 @@
         color: var(--color-role-accent);
         text-decoration: underline;
     }
-}
-
-/* ---------- add session event dialog ---------- */
-
-.add-event-dialog {
-    border: 1px solid var(--color-border);
-    border-radius: var(--border-radius);
-    background: var(--color-bg-primary);
-    color: var(--color-text);
-    padding: var(--spacing-md, 1rem);
-    width: min(440px, 92vw);
-
-    &::backdrop {
-        background: rgba(0, 0, 0, 0.35);
-    }
-
-    & h2 {
-        margin: 0 0 0.3rem;
-        font-size: 0.95rem;
-    }
-}
-
-.add-event-hint {
-    margin: 0 0 0.8rem;
-    color: var(--color-text-muted);
-    font-size: 0.78rem;
-    line-height: 1.4;
-}
-
-.add-event-field {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-    margin-bottom: 0.7rem;
-
-    & span {
-        font-size: 0.7rem;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        color: var(--color-text-secondary);
-    }
-
-    & input,
-    & select,
-    & textarea {
-        font-family: var(--font-mono);
-        font-size: 0.8rem;
-        color: var(--color-text);
-        background: var(--color-bg-secondary);
-        border: 1px solid var(--color-border);
-        border-radius: var(--border-radius);
-        padding: 0.4rem 0.5rem;
-
-        &:focus-visible {
-            outline: 2px solid var(--color-role-accent);
-            outline-offset: 1px;
-        }
-    }
-}
-
-.add-event-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.6rem;
-    margin-top: 0.4rem;
-}
-
-/* ---------- summary-views pane (LTM tab, right side) ---------- */
-
-.summary-views-list {
-    flex: 1;
-    overflow-y: auto;
-    min-height: 0;
-}
-
-.summary-empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--spacing-sm);
-    padding: var(--spacing-md);
-}
-
-/* One view as a native <details> disclosure with an overlaid controls row. */
-.summary-view-section {
-    position: relative;
-    border-bottom: 1px solid var(--color-border);
-}
-
-.summary-view-summary {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    /* reserve room for the absolutely-positioned controls (badge + generate
-     * + Delete) so a long view name can't slide under them */
-    padding: 0.5rem 15rem 0.5rem var(--spacing-sm);
-    min-height: 1.6rem;
-    cursor: pointer;
-    list-style: none;
-    user-select: none;
-}
-
-.summary-view-summary::-webkit-details-marker {
-    display: none;
-}
-
-.summary-view-chevron {
-    font-size: 0.7rem;
-    color: var(--color-text-muted);
-    width: 0.8rem;
-}
-
-.summary-view-name {
-    font-size: 0.8125rem;
-    font-weight: 600;
-}
-
-.summary-view-count {
-    font-family: var(--font-mono);
-    font-size: 0.6875rem;
-    color: var(--color-text-muted);
-}
-
-.summary-view-controls {
-    position: absolute;
-    top: 0.4rem;
-    right: var(--spacing-sm);
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-}
-
-.summary-view-badge {
-    white-space: nowrap;
-    font-family: var(--font-mono);
-    font-size: 0.625rem;
-    padding: 1px 5px;
-    border-radius: 2px;
-    background: rgba(199, 150, 228, 0.18);
-    color: #6a3aa0;
-
-    body:has(#theme-toggle:checked) & {
-        background: rgba(199, 150, 228, 0.22);
-        color: #d4b3f0;
-    }
-}
-
-.summary-card-list {
-    list-style: none;
-    margin: 0;
-    /* same surrounding padding + inter-card gap as the records list */
-    padding: var(--spacing-xs) var(--spacing-sm);
-    display: flex;
-    flex-direction: column;
-    gap: 0.7rem;
-}
-
-.summary-card {
-    font-size: 0.85rem;
-    line-height: 1.45;
-
-    &.is-expanded .summary-banner-text {
-        -webkit-line-clamp: unset;
-        overflow: visible;
-    }
-
-    &.is-empty .summary-banner-text {
-        color: var(--color-text-muted);
-        font-style: italic;
-    }
-
-    & .card-meta {
-        align-items: center;
-    }
-}
-
-.summary-scope-badge {
-    font-family: var(--font-mono);
-    font-size: 0.625rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    padding: 1px 5px;
-    border-radius: 2px;
-    background: var(--color-role-accent-bg);
-    color: var(--color-role-accent);
-    flex-shrink: 0;
-}
-
-.summary-card-count {
-    margin-left: auto;
-    font-family: var(--font-mono);
-    font-size: 0.625rem;
-    color: var(--color-text-muted);
-}
-
-.summary-card-footer {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.4rem;
-    /* thin separator above the footer */
-    margin-top: 0.4rem;
-    padding-top: 0.4rem;
-    border-top: 1px solid var(--color-border);
-}
-
-.summary-group-wrap {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.2rem;
-    min-width: 0;
-}
-
-.summary-group {
-    font-family: var(--font-mono);
-    font-size: 0.72rem;
-    color: var(--color-text-secondary);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    min-width: 0;
-}
-
-.summary-empty {
-    padding: 0.4rem var(--spacing-sm);
-    color: var(--color-text-muted);
-    font-size: 0.78rem;
-    font-style: italic;
 }
 
 /* ---------- per-pane auto refresh ---------- */

@@ -9,11 +9,10 @@
  * passes it into `searchLongTermMemory(...)`.
  *
  * Every server-side tag filter gets a dropdown in the toolbar's filter
- * row: sessions, memory type, topics, entities (multi-select, `any`
- * semantics) plus user + namespace (single-select - they're the shared
- * connection scope, so picking one routes through the caller's
- * onScopeChange just like the Overview pills). Topic/entity chips on the
- * cards toggle the same filters.
+ * row: sessions, memory type, topics (multi-select, `any` semantics) plus
+ * user + namespace (single-select - they're the shared connection scope,
+ * so picking one routes through the caller's onScopeChange just like the
+ * Overview pills). Topic chips on the cards toggle the same filter.
  */
 
 import { $, fromTemplate, makeCopyButton, wireClampToggle } from "../lib/dom.js";
@@ -22,18 +21,15 @@ import { formatDateTime, pluralize, relativeTime, shortId } from "../lib/format.
 const MEMORY_TYPES = ["semantic", "episodic", "message"];
 
 const seenIds = new Set();
-// Distinct topic/entity values observed on this connection - feeds the
-// dropdown option lists (the server has no enumeration endpoint).
+// Distinct topic values observed on this connection - feeds the topics
+// dropdown option list (the server has no enumeration endpoint).
 const seenTopics = new Set();
-const seenEntities = new Set();
 
 const filter = {
     text: "",
     topics: [],
-    entities: [],
     sessionIds: [],
     memoryTypes: [],
-    optimizeQuery: false,
 };
 let knownSessions = [];
 let scopeOptions = {
@@ -47,6 +43,8 @@ let searchDebounce = null;
 let onChangeCallback = null;
 let onDeleteCallback = null;
 let onScopeChangeCallback = null;
+let onSelectCallback = null;
+let selectedId = null;
 
 // Multi-select dropdown instances, repainted when their options change.
 const dropdowns = new Map();
@@ -54,7 +52,7 @@ const dropdowns = new Map();
 export function reset() {
     seenIds.clear();
     seenTopics.clear();
-    seenEntities.clear();
+    selectedId = null;
     filter.sessionIds = [];
     filter.memoryTypes = [];
     // Wipe the rendered lists + stats so stale cards don't linger across a
@@ -71,8 +69,8 @@ export function getFilter() {
 }
 
 /**
- * Wire the search input, optimize toggle and the filter row. Idempotent -
- * safe to call once at app startup.
+ * Wire the search input and the filter row. Idempotent - safe to call once
+ * at app startup.
  *
  * - `onChange` fires (debounced for text input, immediate for everything
  *   else) whenever the filter mutates; caller uses it to refetch.
@@ -81,10 +79,11 @@ export function getFilter() {
  * - `onScopeChange({ userId } | { namespace })` fires when the user/ns
  *   dropdowns pick a value - the caller owns that shared scope.
  */
-export function init({ onChange, onDelete, onScopeChange }) {
+export function init({ onChange, onDelete, onScopeChange, onSelect }) {
     onChangeCallback = onChange;
     onDeleteCallback = onDelete;
     onScopeChangeCallback = onScopeChange;
+    onSelectCallback = onSelect;
 
     $("ltm-search").addEventListener("input", (event) => {
         clearTimeout(searchDebounce);
@@ -94,31 +93,7 @@ export function init({ onChange, onDelete, onScopeChange }) {
         }, 300);
     });
 
-    $("ltm-optimize").addEventListener("change", (event) => {
-        filter.optimizeQuery = event.target.checked;
-        onChangeCallback?.();
-    });
-
     initFilterRow();
-}
-
-/**
- * Apply backend capability flags to the panel. Called by the main entry
- * point right after a Connect, before the first poll fires. Hides UI
- * affordances the connected backend doesn't support and resets the
- * corresponding filter state so a stale toggle from a prior session
- * doesn't leak through.
- */
-export function setCapabilities({ optimizeQuery }) {
-    const optimizeWrapper =
-        $("ltm-optimize")?.closest("label, .ltm-optimize-wrapper") ??
-        $("ltm-optimize");
-    if (optimizeWrapper) optimizeWrapper.hidden = !optimizeQuery;
-    if (!optimizeQuery) {
-        const checkbox = $("ltm-optimize");
-        if (checkbox) checkbox.checked = false;
-        filter.optimizeQuery = false;
-    }
 }
 
 /**
@@ -185,17 +160,6 @@ function initFilterRow() {
             selected: () => filter.topics,
             onToggle: (value) => toggleListFilter("topics", value),
             emptyText: "no topics seen yet",
-        }),
-    );
-    row.appendChild(
-        buildMultiSelect({
-            key: "entities",
-            label: "entities",
-            getOptions: () =>
-                [...new Set([...seenEntities, ...filter.entities])].sort(),
-            selected: () => filter.entities,
-            onToggle: (value) => toggleListFilter("entities", value),
-            emptyText: "no entities seen yet",
         }),
     );
 
@@ -372,7 +336,7 @@ function toggleSessionFilter(sessionId) {
     onChangeCallback?.();
 }
 
-/** Toggle a value in filter.topics / filter.entities / filter.memoryTypes. */
+/** Toggle a value in filter.topics / filter.memoryTypes. */
 function toggleListFilter(bucket, value) {
     const list = filter[bucket];
     const i = list.indexOf(value);
@@ -385,7 +349,6 @@ function toggleListFilter(bucket, value) {
 function clearAllFilters() {
     filter.text = "";
     filter.topics = [];
-    filter.entities = [];
     filter.sessionIds = [];
     filter.memoryTypes = [];
     $("ltm-search").value = "";
@@ -404,17 +367,12 @@ function clearAllFilters() {
 export function renderRecords(memories) {
     $("longterm-stats").textContent = pluralize(memories.length, "result");
 
-    // Grow the topic/entity option pools from whatever the current result
-    // set shows.
+    // Grow the topics option pool from whatever the current result set shows.
     let sawNewValues = false;
     for (const memory of memories) {
         for (const topic of memory.topics ?? []) {
             if (!seenTopics.has(topic)) sawNewValues = true;
             seenTopics.add(topic);
-        }
-        for (const entity of memory.entities ?? []) {
-            if (!seenEntities.has(entity)) sawNewValues = true;
-            seenEntities.add(entity);
         }
     }
     if (sawNewValues) repaintDropdowns();
@@ -425,8 +383,8 @@ export function renderRecords(memories) {
     // there's a text query, and otherwise implementation-defined). Sorting
     // client-side gives consistent UX in all modes.
     const sorted = [...memories].sort((a, b) => {
-        const ta = new Date(a.created_at ?? 0).getTime();
-        const tb = new Date(b.created_at ?? 0).getTime();
+        const ta = new Date(a.createdAt ?? 0).getTime();
+        const tb = new Date(b.createdAt ?? 0).getTime();
         return ta - tb;
     });
 
@@ -459,12 +417,12 @@ export function renderOverview(memories) {
 
     const newestFirst = [...memories].sort(
         (a, b) =>
-            new Date(b.created_at ?? 0).getTime() -
-            new Date(a.created_at ?? 0).getTime(),
+            new Date(b.createdAt ?? 0).getTime() -
+            new Date(a.createdAt ?? 0).getTime(),
     );
 
     const latest = $("overview-latest");
-    const newest = newestFirst[0]?.created_at;
+    const newest = newestFirst[0]?.createdAt;
     if (newest) {
         latest.hidden = false;
         latest.dateTime = newest;
@@ -479,17 +437,17 @@ export function renderOverview(memories) {
     for (const memory of newestFirst) {
         const node = fromTemplate("browse-card-template");
 
-        const memoryType = memory.memory_type ?? "semantic";
+        const memoryType = memory.memoryType ?? "semantic";
         const typeEl = node.querySelector(".type-badge");
         typeEl.classList.add(`type-${memoryType}`);
         typeEl.textContent = memoryType;
 
-        if (memory.created_at) {
+        if (memory.createdAt) {
             const when = node.querySelector("time");
             when.hidden = false;
-            when.dateTime = memory.created_at;
-            when.textContent = formatDateTime(memory.created_at);
-            when.title = relativeTime(memory.created_at);
+            when.dateTime = memory.createdAt;
+            when.textContent = formatDateTime(memory.createdAt);
+            when.title = relativeTime(memory.createdAt);
         }
 
         const textEl = node.querySelector(".card-text");
@@ -510,6 +468,18 @@ export function renderOverview(memories) {
     }
 }
 
+/** Mark a card selected (single selection) and notify the caller. */
+function selectRecord(memory, card) {
+    selectedId = memory.id;
+    for (const el of document.querySelectorAll(
+        "#longterm-list .card.is-selected",
+    )) {
+        el.classList.remove("is-selected");
+    }
+    card.classList.add("is-selected");
+    onSelectCallback?.(memory);
+}
+
 /**
  * Clone the longterm-card template and fill its slots from a single
  * memory record. The template's structure (meta row, type badge,
@@ -526,17 +496,34 @@ function buildCard(memory, hasText) {
     const card = node.querySelector(".card");
     if (isNew) card.classList.add("is-new");
 
-    const memoryType = memory.memory_type ?? "semantic";
+    // Clicking anywhere on the card (except an inner control - session
+    // filter, chip, delete, copy) opens the record in the detail pane.
+    if (memory.id) {
+        card.classList.add("is-selectable");
+        if (memory.id === selectedId) card.classList.add("is-selected");
+        card.addEventListener("click", (event) => {
+            if (
+                event.target.closest(
+                    "button, .chip, code.is-clickable, .hover-copy",
+                )
+            ) {
+                return;
+            }
+            selectRecord(memory, card);
+        });
+    }
+
+    const memoryType = memory.memoryType ?? "semantic";
     const typeEl = node.querySelector(".type-badge");
     typeEl.classList.add(`type-${memoryType}`);
     typeEl.textContent = memoryType;
 
-    if (memory.created_at) {
+    if (memory.createdAt) {
         const when = node.querySelector(".card-meta time");
         when.hidden = false;
-        when.dateTime = memory.created_at;
-        when.textContent = formatDateTime(memory.created_at);
-        when.title = relativeTime(memory.created_at);
+        when.dateTime = memory.createdAt;
+        when.textContent = formatDateTime(memory.createdAt);
+        when.title = relativeTime(memory.createdAt);
     }
 
     // Key name / id - copy icon sits to the LEFT of the shortened id and
@@ -568,31 +555,27 @@ function buildCard(memory, hasText) {
 
     node.querySelector(".card-text").textContent = memory.text ?? "";
 
-    // Topics purple, entities grey - chip classes styled in inspector.css.
+    // Topic chips (styled in inspector.css) toggle the topics filter.
     const topicsRow = buildChipRow("topics", memory.topics, "chip-topic");
     if (topicsRow) node.querySelector(".card-text").after(topicsRow);
-    const entitiesRow = buildChipRow("entities", memory.entities, "chip-entity");
-    if (entitiesRow) {
-        (topicsRow ?? node.querySelector(".card-text")).after(entitiesRow);
-    }
 
     // Footer: source session (click to filter, copy on hover) + delete.
-    if (memory.session_id) {
+    if (memory.sessionId) {
         const session = node.querySelector(".card-meta-session");
         session.hidden = false;
         const code = session.querySelector("code");
-        code.textContent = memory.session_id;
-        code.title = `Click to filter by this session: ${memory.session_id}`;
+        code.textContent = memory.sessionId;
+        code.title = `Click to filter by this session: ${memory.sessionId}`;
         code.classList.add("is-clickable");
         code.addEventListener("click", () => {
-            if (!knownSessions.includes(memory.session_id)) {
-                knownSessions.push(memory.session_id);
+            if (!knownSessions.includes(memory.sessionId)) {
+                knownSessions.push(memory.sessionId);
             }
-            toggleSessionFilter(memory.session_id);
+            toggleSessionFilter(memory.sessionId);
         });
         session
             .querySelector(".card-session-copy")
-            .replaceWith(makeCopyButton(memory.session_id, "Copy session id"));
+            .replaceWith(makeCopyButton(memory.sessionId, "Copy session id"));
     }
 
     if (memory.id) {
@@ -635,9 +618,9 @@ function buildChipRow(label, values, chipClass) {
 
 /**
  * Removable pills above the card list reflecting the active filter set, so
- * it's always obvious what's narrowing the results. Sessions and types
- * appear here alongside topics/entities - one consistent "what's
- * filtering my view" surface.
+ * it's always obvious what's narrowing the results. Sessions, types, and
+ * topics all appear here - one consistent "what's filtering my view"
+ * surface.
  */
 function renderActiveFilters() {
     const container = $("ltm-active-filters");
@@ -669,13 +652,9 @@ function renderActiveFilters() {
     for (const topic of filter.topics) {
         append("topic", topic, () => toggleListFilter("topics", topic));
     }
-    for (const entity of filter.entities) {
-        append("entity", entity, () => toggleListFilter("entities", entity));
-    }
 
     if (
         filter.topics.length ||
-        filter.entities.length ||
         filter.sessionIds.length ||
         filter.memoryTypes.length
     ) {

@@ -8,10 +8,8 @@
  * chose vs. `chrome.storage.local` (which would persist on disk).
  *
  * Each entry has a stable `id` (so the "x" button can target it
- * unambiguously) and an `alias` derived automatically from the config:
- *
- *   - OSS:   hostname[:port] from the URL  (e.g. "localhost:8000")
- *   - Cloud: the storeId                   (e.g. "store-abc-123")
+ * unambiguously) and an `alias` derived automatically from the config: the
+ * storeId (e.g. "inspector-test"), falling back to the URL host.
  *
  * `lastUsedId` tracks which entry to auto-select when the connect panel
  * re-opens, so the user just sees the "live" badge and clicks Connect.
@@ -44,14 +42,12 @@ const store =
           };
 
 /**
- * Compute the human-readable alias for a config. OSS uses the hostname
- * from the URL (with port if present); Cloud uses the storeId since
- * that's what the user named in the Redis Cloud console.
+ * Compute the human-readable alias for a config. Both backends are
+ * store-scoped, so the storeId is the natural label; fall back to the URL
+ * host if a storeId is somehow missing.
  */
 export function aliasFor(config) {
-    if (config.backend === "cloud") {
-        return config.storeId || "(no store id)";
-    }
+    if (config.storeId) return config.storeId;
     try {
         const u = new URL(config.url);
         return u.port ? `${u.hostname}:${u.port}` : u.hostname;

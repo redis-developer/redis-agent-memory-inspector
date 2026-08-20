@@ -59,51 +59,21 @@ export function render(workingMemory) {
 }
 
 /**
- * Second header row: created timestamp, TTL, and the icon-only Clear.
- * `null` hides the values but the row stays (its min-height keeps the
- * header from shrinking when a scope has no working memory).
+ * Second header row: the icon-only Clear action, shown only when a session
+ * is loaded. The row's min-height keeps the header from shrinking when a
+ * scope has no working memory.
  */
 function setMetaRow(workingMemory) {
-    const createdItem = $("working-created").closest(".pane-meta-item");
-    const ttlItem = $("working-ttl");
-    const clearButton = $("working-clear-button");
-
-    if (!workingMemory) {
-        createdItem.hidden = true;
-        ttlItem.hidden = true;
-        clearButton.hidden = true;
-        return;
-    }
-
-    clearButton.hidden = false;
-
-    if (workingMemory.created_at) {
-        createdItem.hidden = false;
-        const time = $("working-created");
-        time.dateTime = workingMemory.created_at;
-        time.textContent = formatDateTime(workingMemory.created_at);
-        time.title = `created ${relativeTime(workingMemory.created_at)}`;
-    } else {
-        createdItem.hidden = true;
-    }
-
-    const ttl = workingMemory.ttl_seconds;
-    ttlItem.hidden = false;
-    ttlItem.querySelector("code").textContent =
-        typeof ttl === "number" ? `${ttl} s` : "No limit";
+    $("working-clear-button").hidden = !workingMemory;
 }
 
 /**
- * Normalize the running summary across backends. OSS exposes it as
- * `context` (a plain string); Cloud exposes `summary` as a SessionSummary
- * object ({ text, updatedAt, summarizedEvents, ... }). Returns null when no
- * summary has been produced yet.
+ * Normalize the running summary. The session-memory response exposes
+ * `summary` as a SessionSummary object ({ text, updatedAt, summarizedEvents,
+ * ... }). Returns null when no summary has been produced yet.
  */
 function summaryFrom(workingMemory) {
-    const { context, summary } = workingMemory;
-    if (typeof context === "string" && context.trim()) {
-        return { text: context };
-    }
+    const { summary } = workingMemory;
     if (
         summary &&
         typeof summary === "object" &&
@@ -115,9 +85,6 @@ function summaryFrom(workingMemory) {
             updatedAt: summary.updatedAt,
             summarizedEvents: summary.summarizedEvents,
         };
-    }
-    if (typeof summary === "string" && summary.trim()) {
-        return { text: summary };
     }
     return null;
 }
@@ -168,20 +135,12 @@ function buildCard(message) {
     roleEl.className = `role-tag role-${role}`;
     roleEl.textContent = role;
 
-    if (message.created_at) {
+    if (message.createdAt) {
         const when = node.querySelector("time");
         when.hidden = false;
-        when.dateTime = message.created_at;
-        when.textContent = formatDateTime(message.created_at);
-        when.title = relativeTime(message.created_at);
-    }
-
-    const flag = message.discrete_memory_extracted;
-    if (flag === "t" || flag === "f") {
-        const flagEl = node.querySelector(".extracted-flag");
-        flagEl.hidden = false;
-        flagEl.classList.add(flag === "t" ? "is-extracted" : "is-pending");
-        flagEl.textContent = flag === "t" ? "extracted ✓" : "extract pending";
+        when.dateTime = message.createdAt;
+        when.textContent = formatDateTime(message.createdAt);
+        when.title = relativeTime(message.createdAt);
     }
 
     node.querySelector(".card-text").textContent = message.content ?? "";

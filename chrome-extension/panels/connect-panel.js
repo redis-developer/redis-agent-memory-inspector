@@ -22,30 +22,36 @@ import {
     remove as forgetConnection,
 } from "../lib/saved-connections.js";
 
-/** Selected backend from the radio group ("oss" or "cloud"). */
+/** Selected backend from the radio group ("cloud" | "self-managed"). */
 function selectedBackend() {
     const checked = document.querySelector(
         'input[name="config-backend"]:checked',
     );
-    return checked?.value ?? "oss";
+    return checked?.value ?? "cloud";
 }
 
 /**
  * Backend-aware accessors for the URL input + its health badge. The form
- * has two URL fields (one per backend) shown/hidden via
- * `applyBackendVisibility`. Everything else in this file just asks
- * "give me the active one" so we don't sprinkle backend checks
- * everywhere.
+ * has one URL field per backend, shown/hidden via `applyBackendVisibility`.
+ * Everything else in this file just asks "give me the active one" so we
+ * don't sprinkle backend checks everywhere.
  */
 function activeUrlInput() {
-    return selectedBackend() === "cloud"
-        ? $("config-url-cloud")
-        : $("config-url-oss");
+    return selectedBackend() === "self-managed"
+        ? $("config-url-selfmanaged")
+        : $("config-url-cloud");
 }
 function activeHealthBadge() {
-    return selectedBackend() === "cloud"
-        ? $("url-health-cloud")
-        : $("url-health-oss");
+    return selectedBackend() === "self-managed"
+        ? $("url-health-selfmanaged")
+        : $("url-health-cloud");
+}
+
+/** Self-managed auth from the selector + credential field. */
+function readSelfManagedAuth() {
+    const method = $("config-auth-selfmanaged").value;
+    const credential = $("config-credential-selfmanaged").value.trim();
+    return { method, credential: credential || undefined };
 }
 
 /**
@@ -77,7 +83,17 @@ function probeClient() {
             proxyUrl,
         });
     }
-    return createAgentMemoryClient({ backend, url });
+    if (backend === "self-managed") {
+        const storeId = $("config-store-id-selfmanaged").value.trim();
+        if (!storeId) return null;
+        return createAgentMemoryClient({
+            backend,
+            url,
+            storeId,
+            auth: readSelfManagedAuth(),
+        });
+    }
+    return null;
 }
 
 const HEALTH_DEBOUNCE_MS = 1000;
@@ -100,30 +116,36 @@ export function show({ seed = {}, onConnect }) {
     // sibling inspector view to hide on the same DOM. The other
     // header/connection-pill elements only exist on inspector.html.
 
-    // Pre-fill cloud-only fields if the seed has them; pre-select the
-    // backend radio according to the seed (defaults to "oss"). The URL
-    // seed lands in the field for the seed's backend - if a seed without
-    // an explicit backend has a URL, it goes to OSS by default.
-    if (seed.backend === "cloud") {
+    // Pre-fill fields from the seed; pre-select the backend radio according
+    // to the seed. A seed without an explicit backend defaults to Cloud.
+    if (seed.backend === "self-managed") {
+        document.querySelector(
+            'input[name="config-backend"][value="self-managed"]',
+        ).checked = true;
+        if (seed.url) $("config-url-selfmanaged").value = seed.url;
+    } else {
+        // Cloud is the default backend.
         document.querySelector(
             'input[name="config-backend"][value="cloud"]',
         ).checked = true;
         if (seed.url) $("config-url-cloud").value = seed.url;
-    } else if (seed.url) {
-        $("config-url-oss").value = seed.url;
     }
     if (seed.apiKey) $("config-api-key").value = seed.apiKey;
-    if (seed.storeId) $("config-store-id").value = seed.storeId;
+    if (seed.storeId) {
+        $("config-store-id").value = seed.storeId;
+        $("config-store-id-selfmanaged").value = seed.storeId;
+    }
     if (seed.proxyUrl) $("config-proxy-url").value = seed.proxyUrl;
+    if (seed.auth) {
+        $("config-auth-selfmanaged").value = seed.auth.method ?? "none";
+        $("config-credential-selfmanaged").value = seed.auth.credential ?? "";
+    }
     applyBackendVisibility();
 
-    // Bind URL/credential listeners on both URL inputs - whichever is
-    // visible at a given moment is the one the user is editing. We
-    // attach to both up front so we don't have to rebind when the user
-    // flips the backend radio.
-    $("config-url-oss").addEventListener("input", onUrlInput);
+    // Bind URL/credential listeners on each backend's URL input up front -
+    // whichever is visible is the one the user is editing - so we don't have
+    // to rebind when the backend radio flips.
     $("config-url-cloud").addEventListener("input", onUrlInput);
-    $("config-url-oss").addEventListener("focus", (e) => e.target.select());
     $("config-url-cloud").addEventListener("focus", (e) => e.target.select());
 
     // Switching backend changes which fields are required + may need a
@@ -152,6 +174,19 @@ export function show({ seed = {}, onConnect }) {
     $("config-api-key").addEventListener("input", onUrlInput);
     $("config-store-id").addEventListener("input", onUrlInput);
     $("config-proxy-url").addEventListener("input", onUrlInput);
+
+    // Self-managed inputs re-probe on change; the auth selector also toggles
+    // the credential field's visibility.
+    $("config-url-selfmanaged").addEventListener("input", onUrlInput);
+    $("config-url-selfmanaged").addEventListener("focus", (e) =>
+        e.target.select(),
+    );
+    $("config-store-id-selfmanaged").addEventListener("input", onUrlInput);
+    $("config-credential-selfmanaged").addEventListener("input", onUrlInput);
+    $("config-auth-selfmanaged").addEventListener("change", () => {
+        applyBackendVisibility();
+        onUrlInput();
+    });
 
     // Form submit (Enter on any input OR Connect button click) drives the
     // connect flow. preventDefault stops the browser from doing a real
@@ -196,7 +231,16 @@ export function show({ seed = {}, onConnect }) {
  * saved-connections doesn't drift from the Reconfigure path.
  */
 function hydrateForm(config) {
-    if (config.backend === "cloud") {
+    if (config.backend === "self-managed") {
+        document.querySelector(
+            'input[name="config-backend"][value="self-managed"]',
+        ).checked = true;
+        $("config-url-selfmanaged").value = config.url ?? "";
+        $("config-store-id-selfmanaged").value = config.storeId ?? "";
+        $("config-auth-selfmanaged").value = config.auth?.method ?? "none";
+        $("config-credential-selfmanaged").value = config.auth?.credential ?? "";
+    } else {
+        // Cloud is the default backend.
         document.querySelector(
             'input[name="config-backend"][value="cloud"]',
         ).checked = true;
@@ -204,11 +248,6 @@ function hydrateForm(config) {
         $("config-api-key").value = config.apiKey ?? "";
         $("config-store-id").value = config.storeId ?? "";
         $("config-proxy-url").value = config.proxyUrl ?? "";
-    } else {
-        document.querySelector(
-            'input[name="config-backend"][value="oss"]',
-        ).checked = true;
-        $("config-url-oss").value = config.url ?? "";
     }
     applyBackendVisibility();
     updateConnectButton();
@@ -298,36 +337,48 @@ function readFormConfig() {
         // built-in default proxy URL.
         config.proxyUrl =
             $("config-proxy-url").value.trim().replace(/\/+$/, "") || null;
+    } else if (backend === "self-managed") {
+        config.storeId = $("config-store-id-selfmanaged").value.trim();
+        config.auth = readSelfManagedAuth();
     }
     return config;
 }
 
 function isCompleteConfig(config) {
-    // Only the connection bits matter here. user_id + session_id are
+    // Only the connection bits matter here. user + session are
     // resolved after connect via the picker pills.
     if (!config?.url) return false;
     if (config.backend === "cloud") {
         if (!config.apiKey || !config.storeId) return false;
+    }
+    if (config.backend === "self-managed") {
+        if (!config.storeId) return false;
     }
     return true;
 }
 
 /**
  * Toggle visibility of fields that only apply to a specific backend. Cloud
- * uses storeId + apiKey + proxy URL; OSS uses neither.
+ * uses storeId + apiKey + proxy URL; self-managed uses storeId + auth.
  */
 function applyBackendVisibility() {
     const backend = selectedBackend();
     const isCloud = backend === "cloud";
-    $("field-url-oss").hidden = isCloud;
+    const isSelfManaged = backend === "self-managed";
     $("field-url-cloud").hidden = !isCloud;
     $("field-store-id").hidden = !isCloud;
     $("field-api-key").hidden = !isCloud;
     $("field-proxy-url").hidden = !isCloud;
+    $("field-url-selfmanaged").hidden = !isSelfManaged;
+    $("field-store-id-selfmanaged").hidden = !isSelfManaged;
+    $("field-auth-selfmanaged").hidden = !isSelfManaged;
+    // Credential only applies when an auth mode other than None is picked.
+    $("field-credential-selfmanaged").hidden =
+        !isSelfManaged || $("config-auth-selfmanaged").value === "none";
 }
 
 function clearHealthBadges() {
-    for (const id of ["url-health-oss", "url-health-cloud"]) {
+    for (const id of ["url-health-cloud", "url-health-selfmanaged"]) {
         const el = $(id);
         if (!el) continue;
         el.textContent = "";
